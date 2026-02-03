@@ -5,7 +5,7 @@ metadata:
   labels:
     app: bun-k8s-demo
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: bun-k8s-demo

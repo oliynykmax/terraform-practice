@@ -4,7 +4,7 @@ module "vpc" {
   source  = "terraform-aws-modules/vpc/aws"
   version = "5.1.2"
 
-  name = "${local.name}-vpc"
+  name = "${var.cluster_name}-vpc"
   cidr = local.vpc_cidr
 
   azs             = local.azs
@@ -17,13 +17,13 @@ module "vpc" {
   enable_dns_support   = true
 
   public_subnet_tags = {
-    "kubernetes.io/role/elb"              = 1
-    "kubernetes.io/cluster/${local.name}" = "shared"
+    "kubernetes.io/role/elb"                    = 1
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
   }
 
   private_subnet_tags = {
-    "kubernetes.io/role/internal-elb"     = 1
-    "kubernetes.io/cluster/${local.name}" = "shared"
+    "kubernetes.io/role/internal-elb"           = 1
+    "kubernetes.io/cluster/${var.cluster_name}" = "shared"
   }
 
   tags = local.tags

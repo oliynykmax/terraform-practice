@@ -33,12 +33,7 @@ jobs:
         with:
           dockerfile: Dockerfile
 
-      - name: Check if Dockerfile exists
-        id: dockerfile-check
-        run: test -f Dockerfile && echo "exists=true" >> $GITHUB_OUTPUT || echo "exists=false" >> $GITHUB_OUTPUT
-
       - name: Lint Kubernetes manifests
-        if: steps.dockerfile-check.outputs.exists == 'true'
         uses: azure/k8s-lint@v2
         with:
           manifests: |
@@ -47,8 +42,6 @@ jobs:
   build:
     needs: lint-and-test
     runs-on: ubuntu-latest
-    outputs:
-      registry: ${{ steps.login-ecr.outputs.registry }}
 
     steps:
       - name: Checkout
@@ -87,12 +80,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Verify image pushed
-        run: |
-          aws ecr batch-delete-image \
-            --repository-name ${{ env.ECR_REPOSITORY }} \
-            --image-ids imageTag=$(git rev-parse --short HEAD) || true
-
   deploy:
     needs: build
     runs-on: ubuntu-latest
@@ -122,39 +109,12 @@ jobs:
 
       - name: Update Kubernetes deployment
         run: |
-          NEW_IMAGE="${{ needs.build.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+          NEW_IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
           kubectl set image deployment/${{ env.K8S_DEPLOYMENT }} ${{ env.K8S_DEPLOYMENT }}=$NEW_IMAGE
 
       - name: Wait for deployment rollout
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const { execSync } = require('child_process');
-            const { EKS_CLUSTER, K8S_DEPLOYMENT, K8S_NAMESPACE } = process.env;
-            
-            const maxAttempts = 30;
-            const delay = 10000;
-            
-            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-              try {
-                const output = execSync(
-                  `kubectl rollout status deployment/${K8S_DEPLOYMENT} --namespace=${K8S_NAMESPACE} --timeout=30s`,
-                  { encoding: 'utf8' }
-                );
-                console.log('Deployment completed successfully');
-                return;
-              } catch (error) {
-                if (attempt === maxAttempts) {
-                  throw new Error(`Rollout failed after ${maxAttempts} attempts`);
-                }
-                console.log(`Waiting for rollout... attempt ${attempt}/${maxAttempts}`);
-                await new Promise(resolve => setTimeout(resolve, delay));
-              }
-            }
-          env:
-            EKS_CLUSTER: ${{ env.EKS_CLUSTER }}
-            K8S_DEPLOYMENT: ${{ env.K8S_DEPLOYMENT }}
-            K8S_NAMESPACE: ${{ env.K8S_NAMESPACE }}
+        run: |
+          kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} --timeout=300s
 
       - name: Verify deployment
         run: |
@@ -166,14 +126,3 @@ jobs:
           sleep 10
           ENDPOINT=$(kubectl get svc ${{ env.K8S_DEPLOYMENT }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
           echo "Service endpoint: http://${ENDPOINT}"
-          echo "endpoint=${ENDPOINT}" >> $GITHUB_OUTPUT
-
-  notify:
-    needs: deploy
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Send failure notification
-        if: needs.deploy.result == 'failure'
-        run: |
-          echo "::warning title=Deployment Failed::Check GitHub Actions for details"

@@ -24,6 +24,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      registry: ${{ steps.login-ecr.outputs.registry }}
 
     steps:
       - name: Checkout
@@ -62,12 +64,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Get image URI
-        id: image
-        run: |
-          echo "registry=${{ steps.login-ecr.outputs.registry }}" >> $GITHUB_OUTPUT
-          echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
-
   deploy:
     needs: build
     runs-on: ubuntu-latest
@@ -84,35 +80,36 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Install AWS CLI
-        run: pip install awscli
-
-      - name: Update kubeconfig
-        run: |
-          export AWS_REGION=${{ env.AWS_REGION }}
-          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER }} --region ${{ env.AWS_REGION }}
-
-      - name: Set up kubectl
+      - name: Install kubectl
         uses: azure/setup-kubectl@v4
         with:
           version: 'latest'
 
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER }} --region ${{ env.AWS_REGION }}
+          echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV
+
+      - name: Verify EKS connection
+        run: |
+          aws eks describe-cluster --name ${{ env.EKS_CLUSTER }} --region ${{ env.AWS_REGION }} --query cluster.status
+
       - name: Update Kubernetes deployment
         run: |
-          NEW_IMAGE="${{ needs.build.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ needs.build.outputs.tag }}"
-          kubectl set image deployment/${{ env.K8S_DEPLOYMENT }} ${{ env.K8S_DEPLOYMENT }}=$NEW_IMAGE
+          NEW_IMAGE="${{ needs.build.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+          kubectl set image deployment/${{ env.K8S_DEPLOYMENT }} ${{ env.K8S_DEPLOYMENT }}=$NEW_IMAGE -n ${{ env.K8S_NAMESPACE }}
 
       - name: Wait for deployment rollout
         run: |
-          kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} --timeout=300s
+          kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} -n ${{ env.K8S_NAMESPACE }} --timeout=300s
 
       - name: Verify deployment
         run: |
-          kubectl get deployment ${{ env.K8S_DEPLOYMENT }}
-          kubectl get pods -l app=${{ env.K8S_DEPLOYMENT }}
+          kubectl get deployment ${{ env.K8S_DEPLOYMENT }} -n ${{ env.K8S_NAMESPACE }}
+          kubectl get pods -l app=${{ env.K8S_DEPLOYMENT }} -n ${{ env.K8S_NAMESPACE }}
 
       - name: Get service endpoint
         run: |
           sleep 10
-          ENDPOINT=$(kubectl get svc ${{ env.K8S_DEPLOYMENT }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          ENDPOINT=$(kubectl get svc ${{ env.K8S_DEPLOYMENT }} -n ${{ env.K8S_NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
           echo "Service endpoint: http://${ENDPOINT}"

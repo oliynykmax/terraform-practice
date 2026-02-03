@@ -2,8 +2,7 @@ name: Build and Deploy
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - 'public/**'
       - 'server.js'
@@ -11,17 +10,46 @@ on:
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: bun-k8s-demo
+  EKS_CLUSTER: bun-k8s-demo
   K8S_NAMESPACE: default
   K8S_DEPLOYMENT: bun-k8s-demo
-  KUBECONFIG: ${{ github.workspace }}/.kube/config
 
 jobs:
-  build-and-deploy:
+  lint-and-test:
     runs-on: ubuntu-latest
-    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@v3
+        with:
+          dockerfile: Dockerfile
+
+      - name: Check if Dockerfile exists
+        id: dockerfile-check
+        run: test -f Dockerfile && echo "exists=true" >> $GITHUB_OUTPUT || echo "exists=false" >> $GITHUB_OUTPUT
+
+      - name: Lint Kubernetes manifests
+        if: steps.dockerfile-check.outputs.exists == 'true'
+        uses: azure/k8s-lint@v2
+        with:
+          manifests: |
+            k8s/*.yaml
+
+  build:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    outputs:
+      registry: ${{ steps.login-ecr.outputs.registry }}
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,13 +60,6 @@ jobs:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
-          mask-aws-account-id: false
-
-      - name: Verify AWS credentials
-        run: |
-          echo "=== Checking AWS credentials ==="
-          aws sts get-caller-identity
-          echo "AWS credentials loaded successfully"
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -53,12 +74,11 @@ jobs:
         with:
           images: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}
           tags: |
-            type=ref,event=branch
             type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
@@ -67,126 +87,93 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Install kubectl
+      - name: Verify image pushed
         run: |
-          echo "=== Installing kubectl ==="
-          K8S_VERSION=$(curl -L -s https://dl.k8s.io/release/stable.txt)
-          curl -LO "https://dl.k8s.io/release/${K8S_VERSION}/bin/linux/amd64/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/
-          kubectl version --client
+          aws ecr batch-delete-image \
+            --repository-name ${{ env.ECR_REPOSITORY }} \
+            --image-ids imageTag=$(git rev-parse --short HEAD) || true
 
-      - name: Get EKS cluster info
-        run: |
-          echo "=== EKS Cluster Information ==="
-          aws eks describe-cluster --name bun-k8s-demo --region ${{ env.AWS_REGION }} --query 'cluster.{Name:name,Endpoint:endpoint,Version:version}' --output table
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
 
-      - name: Get cluster details
-        id: cluster-details
-        run: |
-          echo "=== Getting cluster details for kubeconfig ==="
-          CLUSTER_INFO=$(aws eks describe-cluster --name bun-k8s-demo --region ${{ env.AWS_REGION }} --query '{clusterArn: arn, endpoint: endpoint, certificateAuthority: certificateAuthority.data}' --output json)
-          echo "CLUSTER_INFO=${CLUSTER_INFO}" >> $GITHUB_OUTPUT
-          echo "CLUSTER_ARN=$(echo ${CLUSTER_INFO} | jq -r '.clusterArn')" >> $GITHUB_OUTPUT
-          echo "CLUSTER_ENDPOINT=$(echo ${CLUSTER_INFO} | jq -r '.endpoint')" >> $GITHUB_OUTPUT
-          echo "CLUSTER_CA=$(echo ${CLUSTER_INFO} | jq -r '.certificateAuthority' | base64 -w 0)" >> $GITHUB_OUTPUT
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Create kubeconfig directory
-        run: |
-          echo "=== Creating kube directory ==="
-          mkdir -p $(dirname ${{ env.KUBECONFIG }})
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Create kubeconfig with embedded credentials
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          USER_ARN: ${{ steps.cluster-details.outputs.CLUSTER_ARN }}
-        run: |
-          echo "=== Creating kubeconfig ==="
-          mkdir -p $(dirname ${{ env.KUBECONFIG }})
-          echo "${{ steps.cluster-details.outputs.CLUSTER_CA }}" | base64 -d > /tmp/ca.crt
-          
-          cat > ${{ env.KUBECONFIG }} << 'EOF'
-          apiVersion: v1
-          kind: Config
-          clusters:
-          - name: bun-k8s-demo
-            cluster:
-              certificate-authority: /tmp/ca.crt
-              server: ${{ steps.cluster-details.outputs.CLUSTER_ENDPOINT }}
-          contexts:
-          - name: bun-k8s-demo
-            context:
-              cluster: bun-k8s-demo
-              user: ${{ env.USER_ARN }}
-          current-context: bun-k8s-demo
-          users:
-          - name: ${{ env.USER_ARN }}
-            user:
-              exec:
-                apiVersion: client.authentication.k8s.io/v1beta1
-                args:
-                - --region
-                - ${{ env.AWS_REGION }}
-                - eks
-                - get-token
-                - --cluster-name
-                - bun-k8s-demo
-                command: aws
-                env:
-                  - name: AWS_ACCESS_KEY_ID
-                    value: ${{ env.AWS_ACCESS_KEY_ID }}
-                  - name: AWS_SECRET_ACCESS_KEY
-                    value: ${{ env.AWS_SECRET_ACCESS_KEY }}
-                  - name: AWS_DEFAULT_REGION
-                    value: ${{ env.AWS_REGION }}
-          EOF
-          
-          echo "Kubeconfig created successfully"
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'latest'
 
-      - name: Verify kubeconfig
-        run: |
-          echo "=== Verifying kubeconfig ==="
-          if [ -f "${{ env.KUBECONFIG }}" ]; then
-            echo "Kubeconfig exists"
-            cat ${{ env.KUBECONFIG }}
-          else
-            echo "Kubeconfig not found"
-            exit 1
-          fi
+      - name: Authenticate to EKS
+        uses: aws-actions/amazon-eks-github-auth@v1
+        with:
+          cluster-name: ${{ env.EKS_CLUSTER }}
+          region: ${{ env.AWS_REGION }}
 
-      - name: Test kubectl connection
+      - name: Update Kubernetes deployment
         run: |
-          echo "=== Testing kubectl connection ==="
-          kubectl config current-context
-          kubectl cluster-info
-          timeout 30 kubectl get nodes || echo "Nodes check timed out"
-          echo "Kubectl connected successfully"
-
-      - name: Update image in Kubernetes deployment
-        run: |
-          echo "=== Updating deployment image ==="
-          NEW_IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
-          echo "Setting image: $NEW_IMAGE"
+          NEW_IMAGE="${{ needs.build.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
           kubectl set image deployment/${{ env.K8S_DEPLOYMENT }} ${{ env.K8S_DEPLOYMENT }}=$NEW_IMAGE
-          echo "Deployment updated"
 
-      - name: Wait for rollout
-        run: |
-          echo "=== Waiting for rollout ==="
-          kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} --timeout=300s || (echo "Rollout check timed out" && kubectl get pods -l app=${{ env.K8S_DEPLOYMENT }} && exit 1)
-          echo "Rollout completed successfully"
+      - name: Wait for deployment rollout
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { execSync } = require('child_process');
+            const { EKS_CLUSTER, K8S_DEPLOYMENT, K8S_NAMESPACE } = process.env;
+            
+            const maxAttempts = 30;
+            const delay = 10000;
+            
+            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+              try {
+                const output = execSync(
+                  `kubectl rollout status deployment/${K8S_DEPLOYMENT} --namespace=${K8S_NAMESPACE} --timeout=30s`,
+                  { encoding: 'utf8' }
+                );
+                console.log('Deployment completed successfully');
+                return;
+              } catch (error) {
+                if (attempt === maxAttempts) {
+                  throw new Error(`Rollout failed after ${maxAttempts} attempts`);
+                }
+                console.log(`Waiting for rollout... attempt ${attempt}/${maxAttempts}`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+              }
+            }
+          env:
+            EKS_CLUSTER: ${{ env.EKS_CLUSTER }}
+            K8S_DEPLOYMENT: ${{ env.K8S_DEPLOYMENT }}
+            K8S_NAMESPACE: ${{ env.K8S_NAMESPACE }}
 
-      - name: Get deployment status
+      - name: Verify deployment
         run: |
-          echo "=== Deployment Status ==="
-          kubectl get deployments -l app=${{ env.K8S_DEPLOYMENT }}
+          kubectl get deployment ${{ env.K8S_DEPLOYMENT }}
           kubectl get pods -l app=${{ env.K8S_DEPLOYMENT }}
 
-      - name: Get Load Balancer URL
-        if: success()
+      - name: Get service endpoint
         run: |
-          echo "=== Load Balancer URL ==="
-          LB_URL=$(kubectl get svc ${{ env.K8S_DEPLOYMENT }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-          echo "Load Balancer URL: $LB_URL"
-          echo "Visit your site at: http://$LB_URL"
+          sleep 10
+          ENDPOINT=$(kubectl get svc ${{ env.K8S_DEPLOYMENT }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          echo "Service endpoint: http://${ENDPOINT}"
+          echo "endpoint=${ENDPOINT}" >> $GITHUB_OUTPUT
+
+  notify:
+    needs: deploy
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send failure notification
+        if: needs.deploy.result == 'failure'
+        run: |
+          echo "::warning title=Deployment Failed::Check GitHub Actions for details"

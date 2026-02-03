@@ -16,6 +16,7 @@ env:
   ECR_REPOSITORY: bun-k8s-demo
   K8S_NAMESPACE: default
   K8S_DEPLOYMENT: bun-k8s-demo
+  KUBECONFIG: ${{ github.workspace }}/.kube/config
 
 jobs:
   build-and-deploy:
@@ -66,48 +67,38 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Update kubeconfig with explicit credentials
+      - name: Install kubectl
         run: |
-          echo "Updating kubeconfig with AWS credentials..."
-          mkdir -p ~/.kube
+          echo "Installing kubectl..."
+          curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+          kubectl version --client
+          echo "✅ kubectl installed"
+
+      - name: Update kubeconfig
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          echo "Updating kubeconfig..."
           aws eks update-kubeconfig \
             --name bun-k8s-demo \
             --region ${{ env.AWS_REGION }} \
             --alias bun-k8s-demo
           
-          # Verify kubeconfig was created
-          if [ -f ~/.kube/config ]; then
-            echo "✅ kubeconfig created"
-            cat ~/.kube/config | head -20
+          if [ -f ${{ env.KUBECONFIG }} ]; then
+            echo "✅ kubeconfig created at: ${{ env.KUBECONFIG }}"
+            ls -la ${{ github.workspace }}/.kube/
           else
             echo "❌ kubeconfig not created"
             exit 1
           fi
 
-      - name: Configure kubectl context
-        run: |
-          echo "Configuring kubectl context..."
-          export KUBECONFIG=~/.kube/config
-          kubectl config use-context bun-k8s-demo
-          echo "✅ kubectl context configured"
-          kubectl config current-context
-
-      - name: Verify kubectl connection
-        run: |
-          echo "Verifying kubectl connection to EKS..."
-          export KUBECONFIG=~/.kube/config
-          
-          # Try with verbose output to see what's happening
-          kubectl version --client
-          kubectl cluster-info || echo "Cluster info failed but continuing..."
-          
-          # Try to get nodes with timeout
-          timeout 30 kubectl get nodes -o wide || echo "Nodes query timed out or failed"
-          
-          echo "✅ kubectl connection verified (or timeout occurred)"
-
       - name: Get EKS cluster info
-        if: success() || failure()
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           echo "=== EKS Cluster Information ==="
           aws eks describe-cluster \
@@ -116,10 +107,23 @@ jobs:
             --query 'cluster.{Name:name,Endpoint:endpoint,Version:version}' \
             --output table
 
+      - name: Verify kubectl connection
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          echo "Verifying kubectl connection to EKS..."
+          kubectl config current-context
+          kubectl cluster-info
+          kubectl get nodes
+          echo "✅ kubectl connected successfully"
+
       - name: Update image in Kubernetes deployment
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           echo "Updating deployment image..."
-          export KUBECONFIG=~/.kube/config
           NEW_IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
           echo "Setting image: $NEW_IMAGE"
           kubectl set image deployment/${{ env.K8S_DEPLOYMENT }} \
@@ -127,18 +131,21 @@ jobs:
           echo "✅ Deployment updated"
 
       - name: Wait for rollout
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           echo "Waiting for rollout to complete..."
-          export KUBECONFIG=~/.kube/config
-          kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} --timeout=300s || \
-          (echo "Rollout timed out, checking pod status..." && \
-          kubectl get pods -l app=${{ env.K8S_DEPLOYMENT }} && \
-          exit 1)
+          kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} --timeout=300s
           echo "✅ Rollout completed successfully"
 
       - name: Get Load Balancer URL
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         if: success()
         run: |
           echo "Getting Load Balancer URL..."
-          export KUBECONFIG=~/.kube/config
-          kubectl get svc ${{ env.K8S_DEPLOYMENT }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+          LB_URL=$(kubectl get svc ${{ env.K8S_DEPLOYMENT }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+          echo "Load Balancer URL: $LB_URL"
+          echo "Visit your site at: http://$LB_URL"

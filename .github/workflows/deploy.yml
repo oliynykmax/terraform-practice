@@ -26,6 +26,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       registry: ${{ steps.login-ecr.outputs.registry }}
+      image_tag: ${{ steps.image-tag.outputs.tag }}
 
     steps:
       - name: Checkout
@@ -45,22 +46,21 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}
-          tags: |
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+      - name: Generate image tag
+        id: image-tag
+        run: |
+          BRANCH_NAME="${GITHUB_REF_NAME}"
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          echo "tag=${BRANCH_NAME}-${SHORT_SHA}" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.image-tag.outputs.tag }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -69,35 +69,21 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
 
-    permissions:
-      id-token: write
-      contents: read
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Configure AWS Credentials (OIDC)
+      - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Get EKS Token
-        uses: aws-actions/amazon-eks-get-token@v1
-        with:
-          cluster-name: ${{ env.EKS_CLUSTER }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v4
-        with:
-          version: 'latest'
+      - name: Update kubeconfig for EKS
+        run: |
+          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER }} --region ${{ env.AWS_REGION }}
 
       - name: Update Kubernetes deployment
         run: |
-          NEW_IMAGE="${{ needs.build.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+          NEW_IMAGE="${{ needs.build.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ needs.build.outputs.image_tag }}"
           kubectl set image deployment/${{ env.K8S_DEPLOYMENT }} ${{ env.K8S_DEPLOYMENT }}=$NEW_IMAGE -n ${{ env.K8S_NAMESPACE }}
 
       - name: Wait for deployment rollout

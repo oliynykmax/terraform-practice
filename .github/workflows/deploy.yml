@@ -37,11 +37,8 @@ jobs:
       - name: Verify AWS credentials
         run: |
           echo "=== Checking AWS credentials ==="
-          echo "AWS_ACCESS_KEY_ID length: ${#AWS_ACCESS_KEY_ID}"
-          echo "AWS_SECRET_ACCESS_KEY length: ${#AWS_SECRET_ACCESS_KEY}"
-          echo "AWS Region: $AWS_REGION"
           aws sts get-caller-identity
-          echo "✅ AWS credentials loaded successfully"
+          echo "AWS credentials loaded successfully"
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -78,97 +75,111 @@ jobs:
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/
           kubectl version --client
-          echo "✅ kubectl installed"
+
+      - name: Get EKS cluster info
+        run: |
+          echo "=== EKS Cluster Information ==="
+          aws eks describe-cluster --name bun-k8s-demo --region ${{ env.AWS_REGION }} --query 'cluster.{Name:name,Endpoint:endpoint,Version:version}' --output table
+
+      - name: Get cluster details
+        id: cluster-details
+        run: |
+          echo "=== Getting cluster details for kubeconfig ==="
+          CLUSTER_INFO=$(aws eks describe-cluster --name bun-k8s-demo --region ${{ env.AWS_REGION }} --query '{clusterArn: arn, endpoint: endpoint, certificateAuthority: certificateAuthority.data}' --output json)
+          echo "CLUSTER_INFO=${CLUSTER_INFO}" >> $GITHUB_OUTPUT
+          echo "CLUSTER_ARN=$(echo ${CLUSTER_INFO} | jq -r '.clusterArn')" >> $GITHUB_OUTPUT
+          echo "CLUSTER_ENDPOINT=$(echo ${CLUSTER_INFO} | jq -r '.endpoint')" >> $GITHUB_OUTPUT
+          echo "CLUSTER_CA=$(echo ${CLUSTER_INFO} | jq -r '.certificateAuthority' | base64 -w 0)" >> $GITHUB_OUTPUT
 
       - name: Create kubeconfig directory
         run: |
           echo "=== Creating kube directory ==="
-          mkdir -p $(dirname $KUBECONFIG)
+          mkdir -p $(dirname ${{ env.KUBECONFIG }})
 
-      - name: Update kubeconfig (using env vars)
+      - name: Create kubeconfig with embedded credentials
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          USER_ARN: ${{ steps.cluster-details.outputs.CLUSTER_ARN }}
         run: |
-          echo "=== Updating kubeconfig (using environment variables) ==="
-          aws eks update-kubeconfig \
-            --name bun-k8s-demo \
-            --region $AWS_REGION \
-            --kubeconfig $KUBECONFIG
+          echo "=== Creating kubeconfig ==="
+          mkdir -p $(dirname ${{ env.KUBECONFIG }})
+          echo "${{ steps.cluster-details.outputs.CLUSTER_CA }}" | base64 -d > /tmp/ca.crt
           
-          if [ -f "$KUBECONFIG" ]; then
-            echo "✅ Kubeconfig created at: $KUBECONFIG"
-            echo "=== Kubeconfig contents ==="
-            cat "$KUBECONFIG"
-          else
-            echo "❌ Kubeconfig not created"
-            exit 1
-          fi
+          cat > ${{ env.KUBECONFIG }} << 'EOF'
+          apiVersion: v1
+          kind: Config
+          clusters:
+          - name: bun-k8s-demo
+            cluster:
+              certificate-authority: /tmp/ca.crt
+              server: ${{ steps.cluster-details.outputs.CLUSTER_ENDPOINT }}
+          contexts:
+          - name: bun-k8s-demo
+            context:
+              cluster: bun-k8s-demo
+              user: ${{ env.USER_ARN }}
+          current-context: bun-k8s-demo
+          users:
+          - name: ${{ env.USER_ARN }}
+            user:
+              exec:
+                apiVersion: client.authentication.k8s.io/v1beta1
+                args:
+                - --region
+                - ${{ env.AWS_REGION }}
+                - eks
+                - get-token
+                - --cluster-name
+                - bun-k8s-demo
+                command: aws
+                env:
+                  - name: AWS_ACCESS_KEY_ID
+                    value: ${{ env.AWS_ACCESS_KEY_ID }}
+                  - name: AWS_SECRET_ACCESS_KEY
+                    value: ${{ env.AWS_SECRET_ACCESS_KEY }}
+                  - name: AWS_DEFAULT_REGION
+                    value: ${{ env.AWS_REGION }}
+          EOF
+          
+          echo "Kubeconfig created successfully"
 
       - name: Verify kubeconfig
         run: |
           echo "=== Verifying kubeconfig ==="
-          if [ -f "$KUBECONFIG" ]; then
-            echo "✅ Kubeconfig exists at: $KUBECONFIG"
-            cat "$KUBECONFIG"
+          if [ -f "${{ env.KUBECONFIG }}" ]; then
+            echo "Kubeconfig exists"
+            cat ${{ env.KUBECONFIG }}
           else
-            echo "❌ Kubeconfig not found"
+            echo "Kubeconfig not found"
             exit 1
           fi
 
-      - name: Get EKS cluster info
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      - name: Test kubectl connection
         run: |
-          echo "=== EKS Cluster Information ==="
-          aws eks describe-cluster \
-            --name bun-k8s-demo \
-            --region $AWS_REGION \
-            --query 'cluster.{Name:name,Endpoint:endpoint,Version:version}' \
-            --output table
-
-      - name: Verify kubectl connection
-        run: |
-          echo "=== Verifying kubectl connection to EKS ==="
-          export KUBECONFIG=$KUBECONFIG
-          
-          echo "KUBECONFIG: $KUBECONFIG"
-          kubectl config view --minify
+          echo "=== Testing kubectl connection ==="
           kubectl config current-context
-          
-          # Test connection with timeout
-          timeout 30 kubectl get nodes || \
-            (echo "Nodes query timed out or failed" && \
-            kubectl config view && \
-            exit 1)
-          
-          echo "✅ kubectl connected successfully"
+          kubectl cluster-info
+          timeout 30 kubectl get nodes || echo "Nodes check timed out"
+          echo "Kubectl connected successfully"
 
       - name: Update image in Kubernetes deployment
         run: |
           echo "=== Updating deployment image ==="
-          export KUBECONFIG=$KUBECONFIG
           NEW_IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
           echo "Setting image: $NEW_IMAGE"
-          kubectl set image deployment/${{ env.K8S_DEPLOYMENT }} \
-            ${{ env.K8S_DEPLOYMENT }}=$NEW_IMAGE
-          echo "✅ Deployment updated"
+          kubectl set image deployment/${{ env.K8S_DEPLOYMENT }} ${{ env.K8S_DEPLOYMENT }}=$NEW_IMAGE
+          echo "Deployment updated"
 
       - name: Wait for rollout
         run: |
           echo "=== Waiting for rollout ==="
-          export KUBECONFIG=$KUBECONFIG
-          kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} --timeout=300s || \
-            (echo "Rollout timed out, getting pod status..." && \
-            kubectl get pods -l app=${{ env.K8S_DEPLOYMENT }} && \
-            exit 1)
-          echo "✅ Rollout completed successfully"
+          kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} --timeout=300s || (echo "Rollout check timed out" && kubectl get pods -l app=${{ env.K8S_DEPLOYMENT }} && exit 1)
+          echo "Rollout completed successfully"
 
       - name: Get deployment status
         run: |
-          echo "=== Final Deployment Status ==="
-          export KUBECONFIG=$KUBECONFIG
+          echo "=== Deployment Status ==="
           kubectl get deployments -l app=${{ env.K8S_DEPLOYMENT }}
           kubectl get pods -l app=${{ env.K8S_DEPLOYMENT }}
 
@@ -176,7 +187,6 @@ jobs:
         if: success()
         run: |
           echo "=== Load Balancer URL ==="
-          export KUBECONFIG=$KUBECONFIG
           LB_URL=$(kubectl get svc ${{ env.K8S_DEPLOYMENT }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
           echo "Load Balancer URL: $LB_URL"
           echo "Visit your site at: http://$LB_URL"

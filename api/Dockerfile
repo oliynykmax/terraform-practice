@@ -1,12 +1,12 @@
 # Stage 1: Install dependencies
-FROM oven/bun:1.1.38 AS deps
+FROM oven/bun:1.1.38-alpine AS deps
 
 WORKDIR /app
 COPY package.json bun.lock* ./
 RUN bun install --frozen-lockfile --production
 
 # Stage 2: Build/compile TypeScript
-FROM oven/bun:1.1.38 AS builder
+FROM oven/bun:1.1.38-alpine AS builder
 
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules

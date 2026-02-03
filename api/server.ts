@@ -7,6 +7,8 @@ interface Session {
 }
 
 const sessions = new Map<string, Session>();
+// Map WebSocket instances to session IDs
+const wsToSession = new WeakMap<object, string>();
 
 // Cleanup idle sessions after 10 minutes
 const IDLE_TIMEOUT = 10 * 60 * 1000;
@@ -54,7 +56,7 @@ const app = new Elysia()
   .ws("/ws", {
     open(ws) {
       const id = crypto.randomUUID();
-      ws.data = { id };
+      wsToSession.set(ws, id);
 
       const proc = createPythonProcess();
       sessions.set(id, { process: proc, lastActivity: Date.now() });
@@ -83,9 +85,13 @@ const app = new Elysia()
     },
 
     message(ws, message) {
-      const id = (ws.data as { id: string }).id;
-      const session = sessions.get(id);
+      const id = wsToSession.get(ws);
+      if (!id) {
+        ws.send(JSON.stringify({ type: "error", data: "Session not found" }));
+        return;
+      }
 
+      const session = sessions.get(id);
       if (!session) {
         ws.send(JSON.stringify({ type: "error", data: "Session not found" }));
         return;
@@ -104,14 +110,16 @@ const app = new Elysia()
     },
 
     close(ws) {
-      const id = (ws.data as { id: string }).id;
-      const session = sessions.get(id);
+      const id = wsToSession.get(ws);
+      if (!id) return;
 
+      const session = sessions.get(id);
       if (session) {
         console.log(`Session ended: ${id}`);
         session.process.kill();
         sessions.delete(id);
       }
+      wsToSession.delete(ws);
     },
   })
   .listen(4000);

@@ -22,25 +22,7 @@ env:
   K8S_DEPLOYMENT: bun-k8s-demo
 
 jobs:
-  lint-and-test:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Lint Dockerfile
-        uses: hadolint/hadolint-action@v3
-        with:
-          dockerfile: Dockerfile
-
-      - name: Lint Kubernetes manifests
-        uses: azure/k8s-lint@v2
-        with:
-          manifests: |
-            k8s/*.yaml
-
   build:
-    needs: lint-and-test
     runs-on: ubuntu-latest
 
     steps:

@@ -901,11 +901,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function sendConsoleCommand() {
-        const code = consoleInput.value.trim();
-        if (!code || !consoleWs || consoleWs.readyState !== WebSocket.OPEN) return;
+        const code = consoleInput.value;
+        if (!code.trim() || !consoleWs || consoleWs.readyState !== WebSocket.OPEN) return;
 
         // Display multiline code with proper prefix
-        const lines = code.split('\n');
+        const lines = code.trimEnd().split('\n');
         lines.forEach((line, i) => {
             const prefix = i === 0 ? '>>> ' : '... ';
             appendConsoleOutput(`${prefix}${line}`, 'input');
@@ -913,7 +913,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         consoleWs.send(JSON.stringify({ code }));
         
-        consoleHistory.push(code);
+        consoleHistory.push(code.trim());
         consoleHistoryIndex = consoleHistory.length;
         consoleInput.value = '';
         consoleInput.style.height = 'auto';

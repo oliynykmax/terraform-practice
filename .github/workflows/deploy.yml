@@ -1,102 +1,68 @@
-name: Build and Deploy
+name: Deploy
 
 on:
   push:
     branches: [main]
-    paths:
-      - 'public/**'
-      - 'server.js'
-      - 'Dockerfile'
-      - '.github/workflows/deploy.yml'
   workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   AWS_REGION: us-east-1
   ECR_REPOSITORY: bun-k8s-demo
   EKS_CLUSTER: bun-k8s-demo
-  K8S_NAMESPACE: default
-  K8S_DEPLOYMENT: bun-k8s-demo
 
 jobs:
   build:
     runs-on: ubuntu-latest
     outputs:
-      registry: ${{ steps.login-ecr.outputs.registry }}
-      image_tag: ${{ steps.image-tag.outputs.tag }}
-
+      image: ${{ steps.build.outputs.image }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Login to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3
 
-      - name: Generate image tag
-        id: image-tag
+      - name: Build and push
+        id: build
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          TAG: ${{ github.sha }}
         run: |
-          BRANCH_NAME="${GITHUB_REF_NAME}"
-          SHORT_SHA="${GITHUB_SHA:0:7}"
-          echo "tag=${BRANCH_NAME}-${SHORT_SHA}" >> $GITHUB_OUTPUT
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: |
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ steps.image-tag.outputs.tag }}
-            ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          IMAGE="${REGISTRY}/${ECR_REPOSITORY}:${TAG}"
+          docker buildx build \
+            --push \
+            --cache-from type=gha \
+            --cache-to type=gha,mode=max \
+            --tag "${IMAGE}" \
+            --tag "${REGISTRY}/${ECR_REPOSITORY}:latest" \
+            .
+          echo "image=${IMAGE}" >> $GITHUB_OUTPUT
 
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-
     steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Update kubeconfig for EKS
+      - name: Deploy to EKS
+        env:
+          IMAGE: ${{ needs.build.outputs.image }}
         run: |
-          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER }} --region ${{ env.AWS_REGION }}
-
-      - name: Update Kubernetes deployment
-        run: |
-          NEW_IMAGE="${{ needs.build.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ needs.build.outputs.image_tag }}"
-          kubectl set image deployment/${{ env.K8S_DEPLOYMENT }} ${{ env.K8S_DEPLOYMENT }}=$NEW_IMAGE -n ${{ env.K8S_NAMESPACE }}
-
-      - name: Wait for deployment rollout
-        run: |
-          kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} -n ${{ env.K8S_NAMESPACE }} --timeout=300s
-
-      - name: Verify deployment
-        run: |
-          kubectl get deployment ${{ env.K8S_DEPLOYMENT }} -n ${{ env.K8S_NAMESPACE }}
-          kubectl get pods -l app=${{ env.K8S_DEPLOYMENT }} -n ${{ env.K8S_NAMESPACE }}
-
-      - name: Get service endpoint
-        run: |
-          sleep 10
-          ENDPOINT=$(kubectl get svc ${{ env.K8S_DEPLOYMENT }} -n ${{ env.K8S_NAMESPACE }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-          echo "Service endpoint: http://${ENDPOINT}"
+          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER }}
+          kubectl set image deployment/bun-k8s-demo bun-k8s-demo=${IMAGE}
+          kubectl rollout status deployment/bun-k8s-demo --timeout=300s

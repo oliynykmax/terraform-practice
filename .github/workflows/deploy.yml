@@ -82,57 +82,38 @@ jobs:
           echo "=== Creating kube directory ==="
           mkdir -p $(dirname $KUBECONFIG)
 
-      - name: Update kubeconfig with AWS profile
+      - name: Update kubeconfig
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           echo "=== Updating kubeconfig ==="
-          echo "KUBECONFIG: $KUBECONFIG"
-          echo "AWS Region: $AWS_REGION"
-          echo "Creating AWS profile in ~/.aws/config..."
-          
-          # Create AWS config directory and profile
-          mkdir -p ~/.aws
-          cat > ~/.aws/config << 'EOF'
-          [default]
-          region = ${AWS_REGION}
-          
-          [profile default]
-          region = ${AWS_REGION}
-          output = json
-          EOF
-          
-          # Create credentials file
-          cat > ~/.aws/credentials << 'EOF'
-          [default]
-          aws_access_key_id = ${AWS_ACCESS_KEY_ID}
-          aws_secret_access_key = ${AWS_SECRET_ACCESS_KEY}
-          EOF
-          
-          echo "✅ AWS profile created"
-          
-          # Update kubeconfig
+          echo "Using AWS profile 'default' for authentication"
           aws eks update-kubeconfig \
             --name bun-k8s-demo \
             --region ${{ env.AWS_REGION }} \
+            --kubeconfig $KUBECONFIG \
             --profile default \
-            --kubeconfig $KUBECONFIG
+            --alias bun-k8s-demo
           
-          echo "=== Kubeconfig created ==="
-          if [ -f $KUBECONFIG ]; then
-            cat $KUBECONFIG
+          if [ -f "$KUBECONFIG" ]; then
+            echo "✅ Kubeconfig created"
           else
             echo "❌ Kubeconfig not created"
+            cat ~/.aws/config ~/.aws/credentials
             exit 1
           fi
 
       - name: Get EKS cluster info
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           echo "=== EKS Cluster Information ==="
           aws eks describe-cluster \
             --name bun-k8s-demo \
             --region ${{ env.AWS_REGION }} \
+            --profile default \
             --query 'cluster.{Name:name,Endpoint:endpoint,Version:version}' \
             --output table
 
@@ -140,17 +121,11 @@ jobs:
         run: |
           echo "=== Verifying kubectl connection ==="
           export KUBECONFIG=$KUBECONFIG
+          kubectl config view --minify
+          kubectl config current-context
           
-          # Debug: Show config
-          echo "Kubeconfig path: $KUBECONFIG"
-          cat $KUBECONFIG || echo "Config not found"
-          
-          # Verify current context
-          kubectl config current-context || true
-          
-          # Try to get nodes
-          kubectl get nodes -o wide || echo "Nodes query failed"
-          
+          # Test connection with timeout
+          timeout 30 kubectl cluster-info || echo "Cluster info check failed (may continue)"
           echo "✅ kubectl connection attempt complete"
 
       - name: Update image in Kubernetes deployment
@@ -168,14 +143,14 @@ jobs:
           echo "=== Waiting for rollout ==="
           export KUBECONFIG=$KUBECONFIG
           kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} --timeout=300s || \
-          (echo "Rollout timed out, checking status..." && \
+          (echo "Rollout check timed out, getting pod status..." && \
           kubectl get pods -l app=${{ env.K8S_DEPLOYMENT }} && \
           exit 1)
           echo "✅ Rollout completed successfully"
 
       - name: Get deployment status
         run: |
-          echo "=== Deployment Status ==="
+          echo "=== Final Deployment Status ==="
           export KUBECONFIG=$KUBECONFIG
           kubectl get deployments -l app=${{ env.K8S_DEPLOYMENT }}
           kubectl get pods -l app=${{ env.K8S_DEPLOYMENT }}

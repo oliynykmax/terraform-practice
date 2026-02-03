@@ -5,7 +5,5 @@
     "start": "bun run server.ts",
     "dev": "bun --watch run server.ts"
   },
-  "dependencies": {
-    "elysia": "^1.2.25"
-  }
+  "dependencies": {}
 }

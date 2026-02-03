@@ -1,14 +1,15 @@
-import { Elysia } from "elysia";
-import { spawn, type Subprocess } from "bun";
+import { spawn, type Subprocess, type ServerWebSocket } from "bun";
 
 interface Session {
   process: Subprocess;
   lastActivity: number;
 }
 
+interface WSData {
+  sessionId: string;
+}
+
 const sessions = new Map<string, Session>();
-// Map WebSocket instances to session IDs
-const wsToSession = new WeakMap<object, string>();
 
 // Cleanup idle sessions after 10 minutes
 const IDLE_TIMEOUT = 10 * 60 * 1000;
@@ -34,9 +35,10 @@ function createPythonProcess(): Subprocess {
   });
 }
 
-async function readStream(
+async function pipeStream(
   stream: ReadableStream<Uint8Array>,
-  onData: (text: string) => void
+  ws: ServerWebSocket<WSData>,
+  type: "stdout" | "stderr"
 ) {
   const reader = stream.getReader();
   const decoder = new TextDecoder();
@@ -44,63 +46,72 @@ async function readStream(
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      onData(decoder.decode(value));
+      ws.send(JSON.stringify({ type, data: decoder.decode(value) }));
     }
   } catch {
     // Stream closed
   }
 }
 
-const app = new Elysia()
-  .get("/health", () => ({ status: "healthy" }))
-  .ws("/ws", {
+const server = Bun.serve<WSData>({
+  port: 4000,
+  
+  fetch(req, server) {
+    const url = new URL(req.url);
+    
+    if (url.pathname === "/health") {
+      return new Response(JSON.stringify({ status: "healthy" }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    
+    if (url.pathname === "/ws") {
+      const sessionId = crypto.randomUUID();
+      const upgraded = server.upgrade(req, { data: { sessionId } });
+      if (upgraded) return undefined;
+      return new Response("WebSocket upgrade failed", { status: 400 });
+    }
+    
+    return new Response("Not found", { status: 404 });
+  },
+  
+  websocket: {
     open(ws) {
-      const id = crypto.randomUUID();
-      wsToSession.set(ws, id);
-
+      const { sessionId } = ws.data;
+      
       const proc = createPythonProcess();
-      sessions.set(id, { process: proc, lastActivity: Date.now() });
-
-      console.log(`Session started: ${id}`);
-
-      // Pipe stdout to WebSocket
+      sessions.set(sessionId, { process: proc, lastActivity: Date.now() });
+      
+      console.log(`Session started: ${sessionId}`);
+      
       if (proc.stdout) {
-        readStream(proc.stdout, (text) => {
-          ws.send(JSON.stringify({ type: "stdout", data: text }));
-        });
+        pipeStream(proc.stdout, ws, "stdout");
       }
-
-      // Pipe stderr to WebSocket
+      
       if (proc.stderr) {
-        readStream(proc.stderr, (text) => {
-          ws.send(JSON.stringify({ type: "stderr", data: text }));
-        });
+        pipeStream(proc.stderr, ws, "stderr");
       }
-
-      // Handle process exit
+      
       proc.exited.then((code) => {
         ws.send(JSON.stringify({ type: "exit", code }));
-        sessions.delete(id);
+        sessions.delete(sessionId);
       });
     },
-
+    
     message(ws, message) {
-      const id = wsToSession.get(ws);
-      if (!id) {
-        ws.send(JSON.stringify({ type: "error", data: "Session not found" }));
-        return;
-      }
-
-      const session = sessions.get(id);
+      const { sessionId } = ws.data;
+      const session = sessions.get(sessionId);
+      
       if (!session) {
         ws.send(JSON.stringify({ type: "error", data: "Session not found" }));
         return;
       }
-
+      
       session.lastActivity = Date.now();
-
+      
       try {
-        const { code } = JSON.parse(message as string);
+        const msg = typeof message === "string" ? message : new TextDecoder().decode(message);
+        const { code } = JSON.parse(msg);
         if (code && session.process.stdin) {
           session.process.stdin.write(code + "\n");
         }
@@ -108,20 +119,18 @@ const app = new Elysia()
         ws.send(JSON.stringify({ type: "error", data: "Invalid message format" }));
       }
     },
-
+    
     close(ws) {
-      const id = wsToSession.get(ws);
-      if (!id) return;
-
-      const session = sessions.get(id);
+      const { sessionId } = ws.data;
+      const session = sessions.get(sessionId);
+      
       if (session) {
-        console.log(`Session ended: ${id}`);
+        console.log(`Session ended: ${sessionId}`);
         session.process.kill();
-        sessions.delete(id);
+        sessions.delete(sessionId);
       }
-      wsToSession.delete(ws);
     },
-  })
-  .listen(4000);
+  },
+});
 
-console.log(`API server running on http://localhost:${app.server?.port}`);
+console.log(`API server running on http://localhost:${server.port}`);

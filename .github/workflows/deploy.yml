@@ -11,11 +11,10 @@ concurrency:
 
 env:
   AWS_REGION: us-east-1
-  ECR_REPOSITORY: bun-k8s-demo
   EKS_CLUSTER: bun-k8s-demo
 
 jobs:
-  build:
+  build-frontend:
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.build.outputs.image }}
@@ -33,24 +32,59 @@ jobs:
 
       - uses: docker/setup-buildx-action@v3
 
-      - name: Build and push
+      - name: Build and push frontend
         id: build
         env:
           REGISTRY: ${{ steps.ecr.outputs.registry }}
           TAG: ${{ github.sha }}
         run: |
-          IMAGE="${REGISTRY}/${ECR_REPOSITORY}:${TAG}"
+          IMAGE="${REGISTRY}/bun-k8s-demo:${TAG}"
           docker buildx build \
             --push \
-            --cache-from type=gha \
-            --cache-to type=gha,mode=max \
+            --cache-from type=gha,scope=frontend \
+            --cache-to type=gha,mode=max,scope=frontend \
             --tag "${IMAGE}" \
-            --tag "${REGISTRY}/${ECR_REPOSITORY}:latest" \
+            --tag "${REGISTRY}/bun-k8s-demo:latest" \
             .
           echo "image=${IMAGE}" >> $GITHUB_OUTPUT
 
+  build-api:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: aws-actions/amazon-ecr-login@v2
+        id: ecr
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build and push API
+        id: build
+        env:
+          REGISTRY: ${{ steps.ecr.outputs.registry }}
+          TAG: ${{ github.sha }}
+        run: |
+          IMAGE="${REGISTRY}/bun-k8s-demo-api:${TAG}"
+          docker buildx build \
+            --push \
+            --cache-from type=gha,scope=api \
+            --cache-to type=gha,mode=max,scope=api \
+            --tag "${IMAGE}" \
+            --tag "${REGISTRY}/bun-k8s-demo-api:latest" \
+            --file api/Dockerfile \
+            api
+          echo "image=${IMAGE}" >> $GITHUB_OUTPUT
+
   deploy:
-    needs: build
+    needs: [build-frontend, build-api]
     runs-on: ubuntu-latest
     steps:
       - uses: aws-actions/configure-aws-credentials@v4
@@ -61,8 +95,11 @@ jobs:
 
       - name: Deploy to EKS
         env:
-          IMAGE: ${{ needs.build.outputs.image }}
+          FRONTEND_IMAGE: ${{ needs.build-frontend.outputs.image }}
+          API_IMAGE: ${{ needs.build-api.outputs.image }}
         run: |
           aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER }}
-          kubectl set image deployment/bun-k8s-demo bun-k8s-demo=${IMAGE}
+          kubectl set image deployment/bun-k8s-demo bun-k8s-demo=${FRONTEND_IMAGE}
+          kubectl set image deployment/python-console-api python-console-api=${API_IMAGE}
           kubectl rollout status deployment/bun-k8s-demo --timeout=300s
+          kubectl rollout status deployment/python-console-api --timeout=300s

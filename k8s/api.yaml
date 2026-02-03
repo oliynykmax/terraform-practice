@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: python-console-api
+  labels:
+    app: python-console-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: python-console-api
+  template:
+    metadata:
+      labels:
+        app: python-console-api
+    spec:
+      containers:
+      - name: python-console-api
+        image: PLACEHOLDER
+        ports:
+        - containerPort: 4000
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 4000
+          initialDelaySeconds: 10
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 4000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: python-console-api
+  labels:
+    app: python-console-api
+spec:
+  type: LoadBalancer
+  selector:
+    app: python-console-api
+  ports:
+  - protocol: TCP
+    port: 4000
+    targetPort: 4000

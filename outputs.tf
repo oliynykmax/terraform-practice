@@ -9,8 +9,13 @@ output "cluster_name" {
 }
 
 output "ecr_repository_url" {
-  description = "ECR repository URL"
+  description = "ECR repository URL for frontend"
   value       = aws_ecr_repository.app.repository_url
+}
+
+output "ecr_api_repository_url" {
+  description = "ECR repository URL for API"
+  value       = aws_ecr_repository.api.repository_url
 }
 
 output "configure_kubectl" {

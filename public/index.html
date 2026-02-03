@@ -259,10 +259,13 @@
                 <a href="#projects" class="nav-command inline-flex items-center gap-2 text-[13px] text-text-muted py-2 px-3 rounded-sm transition-all duration-200 relative before:absolute before:left-0 before:top-0 before:w-[2px] before:h-full before:bg-yellow before:origin-bottom before:[-webkit-transform:scaleY(0)] before:transform before:transition-transform before:duration-200 hover:text-text hover:bg-bg-elevated hover:before:[-webkit-transform:scaleY(1)] hover:before:transform active:text-yellow">
                     <span>projects</span>
                 </a>
-                <a href="#skills" class="nav-command inline-flex items-center gap-2 text-[13px] text-text-muted py-2 px-3 rounded-sm transition-all duration-200 relative before:absolute before:left-0 before:top-0 before:w-[2px] before:h-full before:bg-yellow before:origin-bottom before:[-webkit-transform:scaleY(0)] before:transform before:transition-transform before- duration-200 hover:text-text hover:bg-bg-elevated hover:before:[-webkit-transform:scaleY(1)] hover:before:transform active:text-yellow">
+                <a href="#skills" class="nav-command inline-flex items-center gap-2 text-[13px] text-text-muted py-2 px-3 rounded-sm transition-all duration-200 relative before:absolute before:left-0 before:top-0 before:w-[2px] before:h-full before:bg-yellow before:origin-bottom before:[-webkit-transform:scaleY(0)] before:transform before:transition-transform before:duration-200 hover:text-text hover:bg-bg-elevated hover:before:[-webkit-transform:scaleY(1)] hover:before:transform active:text-yellow">
                     <span>skills</span>
                 </a>
-                <a href="#contact" class="nav-command inline-flex items-center gap-2 text-[13px] text-text-muted py-2 px-3 rounded-sm transition-all duration-200 relative before:absolute before:left-0 before:top-0 before:w-[2px] before:h-full before:bg-yellow before:origin-bottom before:[-webkit-transform:scaleY(0)] before:transform before- transition-transform before- duration-200 hover:text-text hover:bg-bg-elevated hover:before:[-webkit-transform:scaleY(1)] hover:before:transform active:text-yellow">
+                <a href="#console" class="nav-command inline-flex items-center gap-2 text-[13px] text-text-muted py-2 px-3 rounded-sm transition-all duration-200 relative before:absolute before:left-0 before:top-0 before:w-[2px] before:h-full before:bg-yellow before:origin-bottom before:[-webkit-transform:scaleY(0)] before:transform before:transition-transform before:duration-200 hover:text-text hover:bg-bg-elevated hover:before:[-webkit-transform:scaleY(1)] hover:before:transform active:text-yellow">
+                    <span>console</span>
+                </a>
+                <a href="#contact" class="nav-command inline-flex items-center gap-2 text-[13px] text-text-muted py-2 px-3 rounded-sm transition-all duration-200 relative before:absolute before:left-0 before:top-0 before:w-[2px] before:h-full before:bg-yellow before:origin-bottom before:[-webkit-transform:scaleY(0)] before:transform before:transition-transform before:duration-200 hover:text-text hover:bg-bg-elevated hover:before:[-webkit-transform:scaleY(1)] hover:before:transform active:text-yellow">
                     <span>contact</span>
                 </a>
             </div>
@@ -526,6 +529,39 @@
         </div>
     </section>
 
+    <!-- Python Console -->
+    <section id="console" class="py-24 px-8 relative z-10">
+        <div class="max-w-[1200px] mx-auto">
+            <div class="mb-12 reveal">
+                <h2 class="text-[32px] font-bold tracking-[-0.02em]">Python Console</h2>
+                <p class="text-[14px] text-text-muted mt-2">Interactive Python REPL - try it out!</p>
+            </div>
+            <div class="reveal stagger-1">
+                <div class="bg-bg-card border border-border rounded-sm overflow-hidden terminal-border">
+                    <div class="flex items-center gap-2 px-4 py-3 border-b border-border bg-bg-elevated">
+                        <div class="flex gap-2">
+                            <span class="w-3 h-3 rounded-full bg-[#ff5f56]"></span>
+                            <span class="w-3 h-3 rounded-full bg-[#ffbd2e]"></span>
+                            <span class="w-3 h-3 rounded-full bg-[#27ca40]"></span>
+                        </div>
+                        <span class="text-[12px] text-text-muted ml-2">python3</span>
+                        <div class="ml-auto flex items-center gap-2">
+                            <span class="console-status-dot w-2 h-2 rounded-full bg-text-muted"></span>
+                            <span class="console-status-text text-[12px] text-text-muted">Disconnected</span>
+                        </div>
+                    </div>
+                    <div id="console-output" class="h-[300px] overflow-y-auto p-4 font-mono text-[13px] leading-relaxed"></div>
+                    <div class="flex items-center gap-2 px-4 py-3 border-t border-border bg-bg-elevated">
+                        <span class="text-yellow text-[13px]">&gt;&gt;&gt;</span>
+                        <input type="text" id="console-input" class="flex-1 bg-transparent border-none outline-none text-text font-mono text-[13px]" placeholder="Enter Python code..." disabled autocomplete="off" spellcheck="false">
+                        <button id="console-send" class="text-[12px] text-bg bg-yellow py-2 px-4 rounded-sm font-semibold transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100" disabled>Run</button>
+                    </div>
+                </div>
+                <p class="text-[12px] text-text-muted mt-4 text-center">Press Enter to execute • Session persists until you leave • 10 min idle timeout</p>
+            </div>
+        </div>
+    </section>
+
     <!-- Contact -->
     <section id="contact" class="py-24 px-8 relative z-10">
         <div class="max-w-[1200px] mx-auto">
@@ -778,6 +814,143 @@ document.addEventListener('DOMContentLoaded', () => {
             hexGrid.style.transform = `translateY(${scrolled * 0.1}px)`;
         }
     });
+
+    // Python Console
+    const consoleOutput = document.getElementById('console-output');
+    const consoleInput = document.getElementById('console-input');
+    const consoleSend = document.getElementById('console-send');
+    const consoleStatusDot = document.querySelector('.console-status-dot');
+    const consoleStatusText = document.querySelector('.console-status-text');
+
+    let consoleWs = null;
+    const consoleHistory = [];
+    let consoleHistoryIndex = -1;
+
+    function setConsoleStatus(status) {
+        consoleStatusDot.className = 'console-status-dot w-2 h-2 rounded-full';
+        if (status === 'connected') {
+            consoleStatusDot.classList.add('bg-[#27ca40]');
+            consoleStatusText.textContent = 'Connected';
+            consoleInput.disabled = false;
+            consoleSend.disabled = false;
+            consoleInput.focus();
+        } else if (status === 'connecting') {
+            consoleStatusDot.classList.add('bg-yellow');
+            consoleStatusText.textContent = 'Connecting...';
+        } else {
+            consoleStatusDot.classList.add('bg-text-muted');
+            consoleStatusText.textContent = 'Disconnected';
+            consoleInput.disabled = true;
+            consoleSend.disabled = true;
+        }
+    }
+
+    function appendConsoleOutput(text, type = 'stdout') {
+        const line = document.createElement('div');
+        line.className = 'whitespace-pre-wrap break-all';
+        if (type === 'stdout') line.classList.add('text-text');
+        else if (type === 'stderr') line.classList.add('text-[#ff6b6b]');
+        else if (type === 'input') line.classList.add('text-yellow');
+        else line.classList.add('text-text-muted', 'italic');
+        line.textContent = text;
+        consoleOutput.appendChild(line);
+        consoleOutput.scrollTop = consoleOutput.scrollHeight;
+    }
+
+    function connectConsole() {
+        setConsoleStatus('connecting');
+        appendConsoleOutput('Connecting to Python session...', 'system');
+
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.hostname}:4000/ws`;
+        
+        consoleWs = new WebSocket(wsUrl);
+
+        consoleWs.onopen = () => {
+            setConsoleStatus('connected');
+            appendConsoleOutput('Connected! Python session ready.', 'system');
+        };
+
+        consoleWs.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'stdout') {
+                    appendConsoleOutput(msg.data, 'stdout');
+                } else if (msg.type === 'stderr') {
+                    appendConsoleOutput(msg.data, 'stderr');
+                } else if (msg.type === 'exit') {
+                    appendConsoleOutput(`Process exited with code ${msg.code}`, 'system');
+                    setConsoleStatus('disconnected');
+                } else if (msg.type === 'error') {
+                    appendConsoleOutput(`Error: ${msg.data}`, 'stderr');
+                }
+            } catch {
+                appendConsoleOutput(event.data, 'stdout');
+            }
+        };
+
+        consoleWs.onclose = () => {
+            setConsoleStatus('disconnected');
+            appendConsoleOutput('Disconnected from server.', 'system');
+        };
+
+        consoleWs.onerror = () => {
+            appendConsoleOutput('Connection error.', 'stderr');
+        };
+    }
+
+    function sendConsoleCommand() {
+        const code = consoleInput.value.trim();
+        if (!code || !consoleWs || consoleWs.readyState !== WebSocket.OPEN) return;
+
+        appendConsoleOutput(`>>> ${code}`, 'input');
+        consoleWs.send(JSON.stringify({ code }));
+        
+        consoleHistory.push(code);
+        consoleHistoryIndex = consoleHistory.length;
+        consoleInput.value = '';
+    }
+
+    if (consoleSend) {
+        consoleSend.addEventListener('click', sendConsoleCommand);
+    }
+    
+    if (consoleInput) {
+        consoleInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                sendConsoleCommand();
+            } else if (e.key === 'ArrowUp') {
+                if (consoleHistoryIndex > 0) {
+                    consoleHistoryIndex--;
+                    consoleInput.value = consoleHistory[consoleHistoryIndex];
+                }
+                e.preventDefault();
+            } else if (e.key === 'ArrowDown') {
+                if (consoleHistoryIndex < consoleHistory.length - 1) {
+                    consoleHistoryIndex++;
+                    consoleInput.value = consoleHistory[consoleHistoryIndex];
+                } else {
+                    consoleHistoryIndex = consoleHistory.length;
+                    consoleInput.value = '';
+                }
+                e.preventDefault();
+            }
+        });
+
+        // Connect when console section is in view
+        const consoleSection = document.getElementById('console');
+        const consoleObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting && !consoleWs) {
+                    connectConsole();
+                }
+            });
+        }, { threshold: 0.3 });
+        
+        if (consoleSection) {
+            consoleObserver.observe(consoleSection);
+        }
+    }
 });
     </script>
 </body>

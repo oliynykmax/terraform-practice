@@ -861,8 +861,9 @@ document.addEventListener('DOMContentLoaded', () => {
         setConsoleStatus('connecting');
         appendConsoleOutput('Connecting to Python session...', 'system');
 
-        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const wsUrl = `${protocol}//${window.location.hostname}:4000/ws`;
+        // API is on a separate service - use its load balancer URL
+        const apiHost = 'a3b3720c2064e4ca89579ca1998ee7b0-622497457.us-east-1.elb.amazonaws.com:4000';
+        const wsUrl = `ws://${apiHost}/ws`;
         
         consoleWs = new WebSocket(wsUrl);
 

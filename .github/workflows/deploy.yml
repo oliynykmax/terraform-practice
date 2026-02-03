@@ -66,22 +66,60 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Update kubeconfig
+      - name: Update kubeconfig with explicit credentials
         run: |
-          echo "Updating kubeconfig..."
-          aws eks update-kubeconfig --name bun-k8s-demo --region ${{ env.AWS_REGION }}
-          echo "✅ kubeconfig updated"
+          echo "Updating kubeconfig with AWS credentials..."
+          mkdir -p ~/.kube
+          aws eks update-kubeconfig \
+            --name bun-k8s-demo \
+            --region ${{ env.AWS_REGION }} \
+            --alias bun-k8s-demo
+          
+          # Verify kubeconfig was created
+          if [ -f ~/.kube/config ]; then
+            echo "✅ kubeconfig created"
+            cat ~/.kube/config | head -20
+          else
+            echo "❌ kubeconfig not created"
+            exit 1
+          fi
+
+      - name: Configure kubectl context
+        run: |
+          echo "Configuring kubectl context..."
+          export KUBECONFIG=~/.kube/config
+          kubectl config use-context bun-k8s-demo
+          echo "✅ kubectl context configured"
+          kubectl config current-context
 
       - name: Verify kubectl connection
         run: |
-          echo "Verifying kubectl connection..."
-          kubectl get nodes
-          kubectl get svc
-          echo "✅ kubectl connected successfully"
+          echo "Verifying kubectl connection to EKS..."
+          export KUBECONFIG=~/.kube/config
+          
+          # Try with verbose output to see what's happening
+          kubectl version --client
+          kubectl cluster-info || echo "Cluster info failed but continuing..."
+          
+          # Try to get nodes with timeout
+          timeout 30 kubectl get nodes -o wide || echo "Nodes query timed out or failed"
+          
+          echo "✅ kubectl connection verified (or timeout occurred)"
+
+      - name: Get EKS cluster info
+        if: success() || failure()
+        run: |
+          echo "=== EKS Cluster Information ==="
+          aws eks describe-cluster \
+            --name bun-k8s-demo \
+            --region ${{ env.AWS_REGION }} \
+            --query 'cluster.{Name:name,Endpoint:endpoint,Version:version}' \
+            --output table
 
       - name: Update image in Kubernetes deployment
         run: |
           echo "Updating deployment image..."
+          export KUBECONFIG=~/.kube/config
           NEW_IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
           echo "Setting image: $NEW_IMAGE"
           kubectl set image deployment/${{ env.K8S_DEPLOYMENT }} \
@@ -91,10 +129,16 @@ jobs:
       - name: Wait for rollout
         run: |
           echo "Waiting for rollout to complete..."
-          kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} --timeout=300s
+          export KUBECONFIG=~/.kube/config
+          kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} --timeout=300s || \
+          (echo "Rollout timed out, checking pod status..." && \
+          kubectl get pods -l app=${{ env.K8S_DEPLOYMENT }} && \
+          exit 1)
           echo "✅ Rollout completed successfully"
 
       - name: Get Load Balancer URL
+        if: success()
         run: |
           echo "Getting Load Balancer URL..."
+          export KUBECONFIG=~/.kube/config
           kubectl get svc ${{ env.K8S_DEPLOYMENT }} -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'

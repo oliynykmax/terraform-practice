@@ -113,7 +113,14 @@ const server = Bun.serve<WSData>({
         const msg = typeof message === "string" ? message : new TextDecoder().decode(message);
         const { code } = JSON.parse(msg);
         if (code && session.process.stdin) {
-          session.process.stdin.write(code + "\n");
+          // For multiline code, wrap in exec() to handle properly
+          if (code.includes('\n')) {
+            // Escape the code for use in a triple-quoted string
+            const escaped = code.replace(/\\/g, '\\\\').replace(/"""/g, '\\"\\"\\"');
+            session.process.stdin.write(`exec("""${escaped}""")\n`);
+          } else {
+            session.process.stdin.write(code + "\n");
+          }
         }
       } catch {
         ws.send(JSON.stringify({ type: "error", data: "Invalid message format" }));

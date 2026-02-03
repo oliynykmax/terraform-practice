@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Max Oliinyk</title>
+    <meta name="description" content="Software Engineering Student at LUT & Hive Helsinki. C++/Python developer.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect x='0' y='0' width='100' height='100' rx='20' fill='%23FFFF00'/><text x='50' y='72' font-size='70' font-family='monospace' font-weight='bold' fill='%23000000' text-anchor='middle'>M</text></svg>">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        mono: ['"JetBrains Mono"', 'monospace'],
+                    },
+                    colors: {
+                        bg: '#000000',
+                        'bg-elevated': '#0a0a0a',
+                        'bg-card': '#111111',
+                        text: '#ffffff',
+                        'text-muted': '#888888',
+                        yellow: '#FFFF00',
+                        'yellow-dim': '#FFD700',
+                        border: '#222222',
+                        'border-light': '#333333',
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .nav-typing {
+                @apply min-w-[160px] max-w-[160px] text-[14px] text-text-muted leading-none inline-block whitespace-nowrap overflow-hidden;
+            }
+            .nav-typing::after {
+                content: '';
+                @apply inline-block w-[2px] h-[18px] bg-yellow ml-[2px] align-middle;
+                animation: blink 1s step-end infinite;
+            }
+            @keyframes blink {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0; }
+            }
+            ::selection {
+                @apply bg-yellow text-bg;
+            }
+            ::-webkit-scrollbar {
+                @apply w-2;
+            }
+            ::-webkit-scrollbar-track {
+                @apply bg-bg;
+            }
+            ::-webkit-scrollbar-thumb {
+                @apply bg-border-light;
+            }
+            ::-webkit-scrollbar-thumb:hover {
+                @apply bg-yellow-dim;
+            }
+
+            .matrix-bg {
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                pointer-events: none;
+                z-index: 0;
+                opacity: 0.03;
+            }
+
+            .glow-line {
+                position: absolute;
+                height: 1px;
+                background: linear-gradient(90deg, transparent, #FFFF00, transparent);
+                animation: scan 8s linear infinite;
+            }
+
+            @keyframes scan {
+                0% { transform: translateY(-100vh); opacity: 0; }
+                50% { opacity: 1; }
+                100% { transform: translateY(100vh); opacity: 0; }
+            }
+
+            .terminal-border {
+                position: relative;
+            }
+
+            .terminal-border::before {
+                content: '';
+                position: absolute;
+                top: -1px;
+                left: -1px;
+                right: -1px;
+                bottom: -1px;
+                background: linear-gradient(135deg, #FFFF00 0%, transparent 30%, transparent 70%, #FFD700 100%);
+                z-index: -1;
+                border-radius: inherit;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+            }
+
+            .terminal-border:hover::before {
+                opacity: 0.5;
+            }
+
+            .reveal {
+                opacity: 0;
+                transform: translateY(30px);
+                transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+
+            .reveal.active {
+                opacity: 1;
+                transform: translateY(0);
+            }
+
+            .stagger-1 { transition-delay: 0.1s; }
+            .stagger-2 { transition-delay: 0.2s; }
+            .stagger-3 { transition-delay: 0.3s; }
+            .stagger-4 { transition-delay: 0.4s; }
+
+            .skill-bar {
+                position: relative;
+                overflow: hidden;
+            }
+
+            .skill-bar::after {
+                content: '';
+                position: absolute;
+                top: 0;
+                left: 0;
+                height: 100%;
+                width: var(--skill-level, 0%);
+                background: linear-gradient(90deg, #FFFF00, #FFD700);
+                transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+
+            .card-hover {
+                transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            }
+
+            .card-hover:hover {
+                transform: translateY(-8px);
+                box-shadow: 0 20px 40px rgba(255, 255, 0, 0.1);
+            }
+
+            .glitch-text {
+                position: relative;
+            }
+
+            .glitch-text::before,
+            .glitch-text::after {
+                content: attr(data-text);
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                opacity: 0;
+            }
+
+            .glitch-text:hover::before {
+                animation: glitch-1 0.3s infinite;
+                color: #ff0000;
+                z-index: -1;
+                opacity: 0.8;
+            }
+
+            .glitch-text:hover::after {
+                animation: glitch-2 0.3s infinite;
+                color: #00ff00;
+                z-index: -2;
+                opacity: 0.8;
+            }
+
+            @keyframes glitch-1 {
+                0%, 100% { transform: translate(0); }
+                20% { transform: translate(-2px, 2px); }
+                40% { transform: translate(-2px, -2px); }
+                60% { transform: translate(2px, 2px); }
+                80% { transform: translate(2px, -2px); }
+            }
+
+            @keyframes glitch-2 {
+                0%, 100% { transform: translate(0); }
+                20% { transform: translate(2px, -2px); }
+                40% { transform: translate(2px, 2px); }
+                60% { transform: translate(-2px, -2px); }
+                80% { transform: translate(-2px, 2px); }
+            }
+
+            .code-bg {
+                font-family: 'JetBrains Mono', monospace;
+                color: rgba(136, 136, 136, 0.15);
+                font-size: 12px;
+                line-height: 1.8;
+                white-space: pre;
+                position: absolute;
+                pointer-events: none;
+                user-select: none;
+            }
+
+            .pulse-ring {
+                position: absolute;
+                border: 1px solid #FFFF00;
+                border-radius: 50%;
+                animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            }
+
+            @keyframes pulse-ring {
+                0% { transform: scale(0.8); opacity: 1; }
+                100% { transform: scale(2); opacity: 0; }
+            }
+
+            .typing-cursor {
+                display: inline-block;
+                width: 2px;
+                height: 1em;
+                background: #FFFF00;
+                margin-left: 2px;
+                animation: cursor-blink 1s step-end infinite;
+            }
+
+            @keyframes cursor-blink {
+                0%, 100% { opacity: 1; }
+                50% { opacity: 0; }
+            }
+
+            .hex-grid {
+                background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%23FFFF00' fill-opacity='0.03'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.98-7.5V0h-2v6.35L0 12.69v2.3zm0 18.5L12.98 41v8h-2v-6.85L0 35.81v-2.3zM15 0v7.5L27.99 15H28v-2.31h-.01L17 6.35V0h-2zm0 49v-8l12.99-7.5H28v2.31h-.01L17 42.15V49h-2z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+            }
+        }
+    </style>
+</head>
+<body class="font-mono bg-bg text-text antialiased relative overflow-x-hidden">
+    <!-- Animated Background -->
+    <canvas id="matrixCanvas" class="matrix-bg"></canvas>
+    <div class="hex-grid fixed inset-0 pointer-events-none z-0 opacity-30"></div>
+    <div class="glow-line" style="top: 20%; width: 100%;"></div>
+    <div class="glow-line" style="top: 60%; width: 100%; animation-delay: 4s;"></div>
+
+    <!-- Navigation -->
+    <nav class="fixed top-0 left-0 right-0 bg-bg z-[100]">
+        <div class="max-w-[1400px] mx-auto px-8 py-5 grid grid-cols-[auto_1fr] gap-8 items-center">
+            <div class="nav-brand flex items-center">
+                <a href="#" class="flex items-baseline gap-2 no-underline">
+                    <span class="nav-typing"></span>
+                </a>
+            </div>
+            <div class="hidden md:flex flex-row justify-center gap-2">
+                <a href="#education" class="nav-command inline-flex items-center gap-2 text-[13px] text-text-muted py-2 px-3 rounded-sm transition-all duration-200 relative before:absolute before:left-0 before:top-0 before:w-[2px] before:h-full before:bg-yellow before:origin-bottom before:[-webkit-transform:scaleY(0)] before:transform before:transition-transform before:duration-200 hover:text-text hover:bg-bg-elevated hover:before:[-webkit-transform:scaleY(1)] hover:before:transform active:text-yellow">
+                    <span>education</span>
+                </a>
+                <a href="#projects" class="nav-command inline-flex items-center gap-2 text-[13px] text-text-muted py-2 px-3 rounded-sm transition-all duration-200 relative before:absolute before:left-0 before:top-0 before:w-[2px] before:h-full before:bg-yellow before:origin-bottom before:[-webkit-transform:scaleY(0)] before:transform before:transition-transform before:duration-200 hover:text-text hover:bg-bg-elevated hover:before:[-webkit-transform:scaleY(1)] hover:before:transform active:text-yellow">
+                    <span>projects</span>
+                </a>
+                <a href="#skills" class="nav-command inline-flex items-center gap-2 text-[13px] text-text-muted py-2 px-3 rounded-sm transition-all duration-200 relative before:absolute before:left-0 before:top-0 before:w-[2px] before:h-full before:bg-yellow before:origin-bottom before:[-webkit-transform:scaleY(0)] before:transform before:transition-transform before- duration-200 hover:text-text hover:bg-bg-elevated hover:before:[-webkit-transform:scaleY(1)] hover:before:transform active:text-yellow">
+                    <span>skills</span>
+                </a>
+                <a href="#contact" class="nav-command inline-flex items-center gap-2 text-[13px] text-text-muted py-2 px-3 rounded-sm transition-all duration-200 relative before:absolute before:left-0 before:top-0 before:w-[2px] before:h-full before:bg-yellow before:origin-bottom before:[-webkit-transform:scaleY(0)] before:transform before- transition-transform before- duration-200 hover:text-text hover:bg-bg-elevated hover:before:[-webkit-transform:scaleY(1)] hover:before:transform active:text-yellow">
+                    <span>contact</span>
+                </a>
+            </div>
+        </div>
+        <div class="h-[1px] bg-gradient-to-r from-transparent via-border to-border"></div>
+    </nav>
+
+    <!-- Hero -->
+    <section class="min-h-screen flex items-center pt-32 pb-16 px-8 relative z-10">
+        <div class="max-w-[1200px] mx-auto grid grid-cols-1 md:grid-cols-[auto_1fr] gap-12 items-center w-full">
+            <div class="relative w-[200px] h-[200px] rounded-full overflow-hidden border-2 border-border justify-self-center reveal">
+                <img src="maoliiny.jpg" alt="Max Oliinyk" class="w-full h-full object-cover object-[30%_center] transition-transform duration-500 hover:scale-110">
+            </div>
+            <div class="flex flex-col gap-4">
+                <p class="text-[14px] text-yellow font-medium reveal stagger-1">&lt; Software Engineering Student /&gt;</p>
+                <h1 class="flex flex-col leading-[0.9]">
+                    <span class="text-[64px] md:text-[80px] font-bold tracking-[-0.02em] glitch-text reveal stagger-2" data-text="Max">Max</span>
+                    <span class="text-[64px] md:text-[80px] font-bold tracking-[-0.02em] text-yellow glitch-text reveal stagger-2" data-text="Oliinyk">Oliinyk</span>
+                </h1>
+                <p class="text-base text-text-muted max-w-[500px] reveal stagger-3">
+                    Studying <span class="text-yellow">Computational Science and AI</span> at LUT
+                </p>
+                <p class="text-base text-text-muted max-w-[500px] reveal stagger-3">
+                    Hive Helsinki graduate - 2026
+                </p>
+                <p class="text-[14px] text-yellow bg-bg-elevated border border-yellow py-2 px-4 rounded-sm inline-block mt-2 reveal stagger-3">
+                    <span class="inline-flex items-center gap-2">
+                        <span class="w-2 h-2 bg-yellow rounded-full animate-pulse"></span>
+                        Looking for internship
+                    </span>
+                </p>
+                <div class="flex flex-col md:flex-row gap-4 mt-2 reveal stagger-4">
+                    <a href="#projects" class="text-[14px] text-bg bg-yellow py-[14px] px-6 no-underline border border-transparent rounded-sm transition-all duration-200 hover:border-bg hover:scale-105 terminal-border">View Projects →</a>
+                    <a href="#contact" class="text-[14px] text-text bg-transparent border border-border-light py-[14px] px-6 no-underline rounded-sm transition-all duration-200 hover:border-yellow hover:text-yellow hover:scale-105">Contact</a>
+                    <a href="Oliinyk_CV.pdf" download class="inline-flex items-center gap-2 text-[14px] text-text bg-bg-elevated border border-border-light py-[14px] px-6 no-underline rounded-sm transition-all duration-200 hover:border-yellow hover:text-yellow hover:scale-105">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        CV
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Education -->
+    <section id="education" class="py-24 px-8 relative z-10">
+        <div class="max-w-[1200px] mx-auto">
+            <div class="mb-12 reveal">
+                <h2 class="text-[32px] font-bold tracking-[-0.02em]">Education</h2>
+            </div>
+            <div class="w-full reveal stagger-1">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <a href="https://www.lut.fi/" target="_blank" class="group p-6 bg-bg-card border border-border card-hover terminal-border no-underline text-inherit block">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 bg-bg-elevated border border-border rounded-sm flex items-center justify-center text-yellow font-bold text-lg group-hover:bg-yellow group-hover:text-bg transition-all duration-300">L</div>
+                            <div>
+                                <h3 class="text-[16px] font-semibold mb-1 group-hover:text-yellow transition-colors">LUT University</h3>
+                                <p class="text-[13px] text-text-muted mb-2">BSc Computational Engineering & AI</p>
+                                <p class="text-[12px] text-yellow">09/2025 – Present</p>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="https://www.hive.fi/about-hive/" target="_blank" class="group p-6 bg-bg-card border border-border card-hover terminal-border no-underline text-inherit block">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 bg-bg-elevated border border-border rounded-sm flex items-center justify-center text-yellow font-bold text-lg group-hover:bg-yellow group-hover:text-bg transition-all duration-300">H</div>
+                            <div>
+                                <h3 class="text-[16px] font-semibold mb-1 group-hover:text-yellow transition-colors">Hive Helsinki</h3>
+                                <p class="text-[13px] text-text-muted mb-2">Software Engineering</p>
+                                <p class="text-[12px] text-yellow">02/2025 – Present</p>
+                            </div>
+                        </div>
+                    </a>
+                    <a href="https://knu.ua/en/" target="_blank" class="group p-6 bg-bg-card border border-border card-hover terminal-border md:col-span-2 no-underline text-inherit block">
+                        <div class="flex items-start gap-4">
+                            <div class="w-12 h-12 bg-bg-elevated border border-border rounded-sm flex items-center justify-center text-text-muted font-bold text-lg group-hover:bg-yellow group-hover:text-bg transition-all duration-300">K</div>
+                            <div>
+                                <h3 class="text-[16px] font-semibold mb-1 group-hover:text-yellow transition-colors">KNU</h3>
+                                <p class="text-[13px] text-text-muted mb-2">BA Sociology — On pause</p>
+                                <p class="text-[12px] text-text-muted">Previous</p>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Projects -->
+    <section id="projects" class="py-24 px-8 relative z-10">
+        <div class="max-w-[1200px] mx-auto">
+            <div class="mb-12 reveal">
+                <h2 class="text-[32px] font-bold tracking-[-0.02em]">Projects</h2>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <article class="group bg-bg-card border border-border p-6 flex flex-col gap-4 card-hover terminal-border reveal stagger-1">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="w-10 h-10 bg-bg-elevated border border-border rounded-sm flex items-center justify-center text-yellow group-hover:bg-yellow group-hover:text-bg transition-all duration-300">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                        </div>
+                        <h3 class="text-[18px] font-semibold">IRC Server</h3>
+                    </div>
+                    <p class="text-[13px] text-text-muted leading-6">Full-featured IRC server in C++20 with client management, channels, commands, and moderation bot.</p>
+                    <div class="flex flex-wrap gap-2 mt-auto">
+                        <span class="text-[11px] text-yellow bg-bg-elevated py-1 px-2 rounded-sm border border-border">C++20</span>
+                        <span class="text-[11px] text-yellow bg-bg-elevated py-1 px-2 rounded-sm border border-border">Networks</span>
+                        <span class="text-[11px] text-yellow bg-bg-elevated py-1 px-2 rounded-sm border border-border">Linux</span>
+                    </div>
+                    <a href="https://github.com/oliynykmax/irc_hive" target="_blank" class="text-[13px] text-text-muted no-underline group-hover:text-yellow transition-colors duration-200 flex items-center gap-2 mt-2">
+                        <span>View on GitHub</span>
+                        <span class="group-hover:translate-x-1 transition-transform duration-200">→</span>
+                    </a>
+                </article>
+
+                <article class="group bg-bg-card border border-border p-6 flex flex-col gap-4 card-hover terminal-border reveal stagger-2">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="w-10 h-10 bg-bg-elevated border border-border rounded-sm flex items-center justify-center text-yellow group-hover:bg-yellow group-hover:text-bg transition-all duration-300">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+                        </div>
+                        <h3 class="text-[18px] font-semibold">Ray Tracer</h3>
+                    </div>
+                    <p class="text-[13px] text-text-muted leading-6">Minimal raytracing engine in C using MLX42. Renders 3D scenes with realistic lighting, shadows, reflections.</p>
+                    <div class="flex flex-wrap gap-2 mt-auto">
+                        <span class="text-[11px] text-yellow bg-bg-elevated py-1 px-2 rounded-sm border border-border">C</span>
+                        <span class="text-[11px] text-yellow bg-bg-elevated py-1 px-2 rounded-sm border border-border">MLX42</span>
+                        <span class="text-[11px] text-yellow bg-bg-elevated py-1 px-2 rounded-sm border border-border">Graphics</span>
+                    </div>
+                    <a href="https://github.com/oliynykmax/Mini-Ray-Tracer" target="_blank" class="text-[13px] text-text-muted no-underline group-hover:text-yellow transition-colors duration-200 flex items-center gap-2 mt-2">
+                        <span>View on GitHub</span>
+                        <span class="group-hover:translate-x-1 transition-transform duration-200">→</span>
+                    </a>
+                </article>
+
+                <article class="group bg-bg-card border border-border p-6 flex flex-col gap-4 card-hover terminal-border reveal stagger-3">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="w-10 h-10 bg-bg-elevated border border-border rounded-sm flex items-center justify-center text-yellow group-hover:bg-yellow group-hover:text-bg transition-all duration-300">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 17l6-6-6-6M12 19h8"/></svg>
+                        </div>
+                        <h3 class="text-[18px] font-semibold">Minishell</h3>
+                    </div>
+                    <p class="text-[13px] text-text-muted leading-6">Unix shell recreation handling commands, redirections, pipes, signals, and built-ins. Deep systems programming.</p>
+                    <div class="flex flex-wrap gap-2 mt-auto">
+                        <span class="text-[11px] text-yellow bg-bg-elevated py-1 px-2 rounded-sm border border-border">C</span>
+                        <span class="text-[11px] text-yellow bg-bg-elevated py-1 px-2 rounded-sm border border-border">Unix</span>
+                        <span class="text-[11px] text-yellow bg-bg-elevated py-1 px-2 rounded-sm border border-border">System</span>
+                    </div>
+                    <a href="https://github.com/oliynykmax/minishell" target="_blank" class="text-[13px] text-text-muted no-underline group-hover:text-yellow transition-colors duration-200 flex items-center gap-2 mt-2">
+                        <span>View on GitHub</span>
+                        <span class="group-hover:translate-x-1 transition-transform duration-200">→</span>
+                    </a>
+                </article>
+
+                <article class="group bg-bg-card border border-border p-6 flex flex-col gap-4 card-hover terminal-border reveal stagger-4">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="w-10 h-10 bg-bg-elevated border border-border rounded-sm flex items-center justify-center text-yellow group-hover:bg-yellow group-hover:text-bg transition-all duration-300">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="1"/><path d="M4.22 4.22l16.56 16.56M19.78 4.22L3.22 20.78"/></svg>
+                        </div>
+                        <h3 class="text-[18px] font-semibold">Ping Pong</h3>
+                    </div>
+                    <p class="text-[13px] text-text-muted leading-6">Classic ping pong game with full-stack implementation. Multiplayer functionality and real-time gameplay.</p>
+                    <div class="flex flex-wrap gap-2 mt-auto">
+                        <span class="text-[11px] text-yellow bg-bg-elevated py-1 px-2 rounded-sm border border-border">Full-Stack</span>
+                        <span class="text-[11px] text-yellow bg-bg-elevated py-1 px-2 rounded-sm border border-border">Game</span>
+                        <span class="text-[11px] text-yellow bg-bg-elevated py-1 px-2 rounded-sm border border-border">Multiplayer</span>
+                    </div>
+                    <a href="https://github.com/v-kuu/Ping-Pong-Fullstack-25" target="_blank" class="text-[13px] text-text-muted no-underline group-hover:text-yellow transition-colors duration-200 flex items-center gap-2 mt-2">
+                        <span>View on GitHub</span>
+                        <span class="group-hover:translate-x-1 transition-transform duration-200">→</span>
+                    </a>
+                </article>
+            </div>
+        </div>
+    </section>
+
+    <!-- Hackathons -->
+    <section class="py-24 px-8 relative z-10">
+        <div class="max-w-[1200px] mx-auto">
+            <div class="mb-12 reveal">
+                <h2 class="text-[32px] font-bold tracking-[-0.02em]">Hackathons</h2>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="group bg-bg-card border border-border p-6 flex flex-col gap-3 card-hover terminal-border reveal stagger-1">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-[11px] text-bg bg-yellow py-1 px-[10px] rounded-sm uppercase tracking-[0.05em] group-hover:scale-110 transition-transform duration-200">Winner</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFF00" stroke-width="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6M18 9h1.5a2.5 2.5 0 0 0 0-5H18M4 22h16M10 14.66v-1.4a3 3 0 0 1 .5-1.63l2.12-3.1a1.5 1.5 0 0 1 2.5 1.63l-2.12 3.1A3 3 0 0 0 14 14.66v1.4M10 14.66H8V22h8v-7.34h-2"/></svg>
+                    </div>
+                    <h3 class="text-[18px] font-semibold">Qt Hackathon</h3>
+                    <p class="text-[14px] text-text-muted leading-6">Android app with Qt integration, sound synthesis, and visual rendering.</p>
+                    <span class="text-[12px] text-text-muted mt-auto">Aug 2025</span>
+                </div>
+
+                <div class="group bg-bg-card border border-border p-6 flex flex-col gap-3 card-hover terminal-border reveal stagger-2">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-[11px] text-bg bg-yellow py-1 px-[10px] rounded-sm uppercase tracking-[0.05em] group-hover:scale-110 transition-transform duration-200">Mentor</span>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFF00" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    </div>
+                    <h3 class="text-[18px] font-semibold">LUTES Hackathon</h3>
+                    <p class="text-[14px] text-text-muted leading-6">Guided teams on version control and agile task division strategies.</p>
+                    <span class="text-[12px] text-text-muted mt-auto">Nov 2025</span>
+                </div>
+
+                <a href="https://github.com/EvAvKein/planet_guardian" target="_blank" class="no-underline text-inherit block group md:col-span-2 reveal stagger-3">
+                    <div class="bg-bg-card border border-border p-6 flex flex-col gap-3 card-hover terminal-border group-hover:border-yellow-dim">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-[11px] text-bg bg-yellow py-1 px-[10px] rounded-sm uppercase tracking-[0.05em] group-hover:scale-110 transition-transform duration-200">Winner</span>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FFFF00" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                        </div>
+                        <h3 class="text-[18px] font-semibold">Hive Game-Jam</h3>
+                        <p class="text-[14px] text-text-muted leading-6">48-hour game jam. Built a full-stack game with team collaboration.</p>
+                        <span class="text-[12px] text-text-muted">2025</span>
+                        <span class="text-[13px] text-yellow mt-2 inline-flex items-center gap-2 group-hover:gap-3 transition-all duration-200">View Game <span>→</span></span>
+                    </div>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Skills -->
+    <section id="skills" class="py-24 px-8 relative z-10">
+        <div class="max-w-[1200px] mx-auto">
+            <div class="mb-12 reveal">
+                <h2 class="text-[32px] font-bold tracking-[-0.02em]">Skills</h2>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-16 reveal stagger-1">
+                <div>
+                    <h3 class="text-[14px] font-semibold mb-6 uppercase tracking-[0.05em] flex items-center gap-2">
+                        <span class="w-2 h-2 bg-yellow rounded-full"></span>
+                        Languages
+                    </h3>
+                    <div class="flex flex-wrap gap-3">
+                        <span class="skill-tag group text-[13px] text-text bg-bg-card border border-border py-[10px] px-5 rounded-sm transition-all duration-200 font-medium hover:bg-yellow hover:text-bg hover:border-yellow hover:-translate-y-px hover:shadow-[0_0_20px_rgba(255,255,0,0.3)] cursor-default">C/C++</span>
+                        <span class="skill-tag group text-[13px] text-text bg-bg-card border border-border py-[10px] px-5 rounded-sm transition-all duration-200 font-medium hover:bg-yellow hover:text-bg hover:border-yellow hover:-translate-y-px hover:shadow-[0_0_20px_rgba(255,255,0,0.3)] cursor-default">Rust</span>
+                        <span class="skill-tag group text-[13px] text-text bg-bg-card border border-border py-[10px] px-5 rounded-sm transition-all duration-200 font-medium hover:bg-yellow hover:text-bg hover:border-yellow hover:-translate-y-px hover:shadow-[0_0_20px_rgba(255,255,0,0.3)] cursor-default">Go</span>
+                        <span class="skill-tag group text-[13px] text-text bg-bg-card border border-border py-[10px] px-5 rounded-sm transition-all duration-200 font-medium hover:bg-yellow hover:text-bg hover:border-yellow hover:-translate-y-px hover:shadow-[0_0_20px_rgba(255,255,0,0.3)] cursor-default">TS</span>
+                        <span class="skill-tag group text-[13px] text-text bg-bg-card border border-border py-[10px] px-5 rounded-sm transition-all duration-200 font-medium hover:bg-yellow hover:text-bg hover:border-yellow hover:-translate-y-px hover:shadow-[0_0_20px_rgba(255,255,0,0.3)] cursor-default">Python</span>
+                        <span class="skill-tag group text-[13px] text-text bg-bg-card border border-border py-[10px] px-5 rounded-sm transition-all duration-200 font-medium hover:bg-yellow hover:text-bg hover:border-yellow hover:-translate-y-px hover:shadow-[0_0_20px_rgba(255,255,0,0.3)] cursor-default">Java</span>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-[14px] font-semibold mb-6 uppercase tracking-[0.05em] flex items-center gap-2">
+                        <span class="w-2 h-2 bg-yellow rounded-full"></span>
+                        Tools
+                    </h3>
+                    <div class="flex flex-wrap gap-3">
+                        <span class="skill-tag group text-[13px] text-text bg-bg-card border border-border py-[10px] px-5 rounded-sm transition-all duration-200 font-medium hover:bg-yellow hover:text-bg hover:border-yellow hover:-translate-y-px hover:shadow-[0_0_20px_rgba(255,255,0,0.3)] cursor-default">Git</span>
+                        <span class="skill-tag group text-[13px] text-text bg-bg-card border border-border py-[10px] px-5 rounded-sm transition-all duration-200 font-medium hover:bg-yellow hover:text-bg hover:border-yellow hover:-translate-y-px hover:shadow-[0_0_20px_rgba(255,255,0,0.3)] cursor-default">Linux</span>
+                        <span class="skill-tag group text-[13px] text-text bg-bg-card border border-border py-[10px] px-5 rounded-sm transition-all duration-200 font-medium hover:bg-yellow hover:text-bg hover:border-yellow hover:-translate-y-px hover:shadow-[0_0_20px_rgba(255,255,0,0.3)] cursor-default">Docker</span>
+                        <span class="skill-tag group text-[13px] text-text bg-bg-card border border-border py-[10px] px-5 rounded-sm transition-all duration-200 font-medium hover:bg-yellow hover:text-bg hover:border-yellow hover:-translate-y-px hover:shadow-[0_0_20px_rgba(255,255,0,0.3)] cursor-default">GDB</span>
+                        <span class="skill-tag group text-[13px] text-text bg-bg-card border border-border py-[10px] px-5 rounded-sm transition-all duration-200 font-medium hover:bg-yellow hover:text-bg hover:border-yellow hover:-translate-y-px hover:shadow-[0_0_20px_rgba(255,255,0,0.3)] cursor-default">Make</span>
+                        <span class="skill-tag group text-[13px] text-text bg-bg-card border border-border py-[10px] px-5 rounded-sm transition-all duration-200 font-medium hover:bg-yellow hover:text-bg hover:border-yellow hover:-translate-y-px hover:shadow-[0_0_20px_rgba(255,255,0,0.3)] cursor-default">Valgrind</span>
+                        <span class="skill-tag group text-[13px] text-text bg-bg-card border border-border py-[10px] px-5 rounded-sm transition-all duration-200 font-medium hover:bg-yellow hover:text-bg hover:border-yellow hover:-translate-y-px hover:shadow-[0_0_20px_rgba(255,255,0,0.3)] cursor-default">Algorithms</span>
+                        <span class="skill-tag group text-[13px] text-text bg-bg-card border border-border py-[10px] px-5 rounded-sm transition-all duration-200 font-medium hover:bg-yellow hover:text-bg hover:border-yellow hover:-translate-y-px hover:shadow-[0_0_20px_rgba(255,255,0,0.3)] cursor-default">Networks</span>
+                        <span class="skill-tag group text-[13px] text-text bg-bg-card border border-border py-[10px] px-5 rounded-sm transition-all duration-200 font-medium hover:bg-yellow hover:text-bg hover:border-yellow hover:-translate-y-px hover:shadow-[0_0_20px_rgba(255,255,0,0.3)] cursor-default">R</span>
+                        <span class="skill-tag group text-[13px] text-text bg-bg-card border border-border py-[10px] px-5 rounded-sm transition-all duration-200 font-medium hover:bg-yellow hover:text-bg hover:border-yellow hover:-translate-y-px hover:shadow-[0_0_20px_rgba(255,255,0,0.3)] cursor-default">MATLAB</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact -->
+    <section id="contact" class="py-24 px-8 relative z-10">
+        <div class="max-w-[1200px] mx-auto">
+            <div class="mb-12 reveal">
+                <h2 class="text-[32px] font-bold tracking-[-0.02em]">Contact</h2>
+            </div>
+            <div class="w-full reveal stagger-1">
+                <p class="text-[18px] text-text-muted mb-8">Have a project or opportunity? Let's connect.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <a href="mailto:hi@oliinyk.dev" class="group flex items-center gap-4 p-4 md:p-6 bg-bg-card border border-border no-underline transition-all duration-300 card-hover terminal-border group-hover:border-yellow-dim">
+                        <div class="w-10 h-10 bg-bg-elevated border border-border rounded-sm flex items-center justify-center text-yellow group-hover:bg-yellow group-hover:text-bg transition-all duration-300">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                        </div>
+                        <div class="flex-1">
+                            <span class="text-[12px] text-text-muted uppercase tracking-[0.05em] block">Email</span>
+                            <span class="text-[14px] text-text group-hover:text-yellow transition-colors">hi@oliinyk.dev</span>
+                        </div>
+                        <span class="text-text-muted group-hover:text-yellow transition-colors group-hover:translate-x-1 duration-200">→</span>
+                    </a>
+                    <a href="https://github.com/oliynykmax" target="_blank" class="group flex items-center gap-4 p-4 md:p-6 bg-bg-card border border-border no-underline transition-all duration-300 card-hover terminal-border group-hover:border-yellow-dim">
+                        <div class="w-10 h-10 bg-bg-elevated border border-border rounded-sm flex items-center justify-center text-yellow group-hover:bg-yellow group-hover:text-bg transition-all duration-300">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"/></svg>
+                        </div>
+                        <div class="flex-1">
+                            <span class="text-[12px] text-text-muted uppercase tracking-[0.05em] block">GitHub</span>
+                            <span class="text-[14px] text-text group-hover:text-yellow transition-colors">github.com/oliynykmax</span>
+                        </div>
+                        <span class="text-text-muted group-hover:text-yellow transition-colors group-hover:translate-x-1 duration-200">→</span>
+                    </a>
+                    <a href="https://linkedin.com/in/oliinykmax" target="_blank" class="group flex items-center gap-4 p-4 md:p-6 bg-bg-card border border-border no-underline transition-all duration-300 card-hover terminal-border group-hover:border-yellow-dim">
+                        <div class="w-10 h-10 bg-bg-elevated border border-border rounded-sm flex items-center justify-center text-yellow group-hover:bg-yellow group-hover:text-bg transition-all duration-300">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
+                        </div>
+                        <div class="flex-1">
+                            <span class="text-[12px] text-text-muted uppercase tracking-[0.05em] block">LinkedIn</span>
+                            <span class="text-[14px] text-text group-hover:text-yellow transition-colors">linkedin.com/in/oliinykmax</span>
+                        </div>
+                        <span class="text-text-muted group-hover:text-yellow transition-colors group-hover:translate-x-1 duration-200">→</span>
+                    </a>
+                    <a href="https://oliinyk.dev" target="_blank" class="group flex items-center gap-4 p-4 md:p-6 bg-bg-card border border-border no-underline transition-all duration-300 card-hover terminal-border group-hover:border-yellow-dim">
+                        <div class="w-10 h-10 bg-bg-elevated border border-border rounded-sm flex items-center justify-center text-yellow group-hover:bg-yellow group-hover:text-bg transition-all duration-300">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                        </div>
+                        <div class="flex-1">
+                            <span class="text-[12px] text-text-muted uppercase tracking-[0.05em] block">Website</span>
+                            <span class="text-[14px] text-text group-hover:text-yellow transition-colors">oliinyk.dev</span>
+                        </div>
+                        <span class="text-text-muted group-hover:text-yellow transition-colors group-hover:translate-x-1 duration-200">→</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-12 border-t border-border relative z-10">
+        <div class="max-w-[1200px] mx-auto px-8 text-center">
+            <p class="text-[12px] text-text-muted">© 2026 Max Oliinyk</p>
+        </div>
+    </footer>
+
+    <script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Matrix Rain Effect
+    const canvas = document.getElementById('matrixCanvas');
+    if (canvas) {
+        const ctx = canvas.getContext('2d');
+        let width = window.innerWidth;
+        let height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+
+        const chars = '0123456789ABCDEF<>/{}[];:.=+-*#@$%';
+        const fontSize = 14;
+        const columns = Math.floor(width / fontSize);
+        const drops = Array(columns).fill(1);
+
+        let frameCount = 0;
+        function drawMatrix() {
+            frameCount++;
+            if (frameCount % 3 !== 0) {
+                requestAnimationFrame(drawMatrix);
+                return;
+            }
+
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+            ctx.fillRect(0, 0, width, height);
+
+            ctx.fillStyle = '#FFFF00';
+            ctx.font = `${fontSize}px JetBrains Mono`;
+
+            for (let i = 0; i < drops.length; i++) {
+                const char = chars[Math.floor(Math.random() * chars.length)];
+                ctx.fillText(char, i * fontSize, drops[i] * fontSize);
+
+                if (drops[i] * fontSize > height && Math.random() > 0.975) {
+                    drops[i] = 0;
+                }
+                drops[i]++;
+            }
+
+            requestAnimationFrame(drawMatrix);
+        }
+        drawMatrix();
+
+        window.addEventListener('resize', () => {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvas.width = width;
+            canvas.height = height;
+        });
+    }
+
+    // Scroll Reveal Animation
+    const revealElements = document.querySelectorAll('.reveal');
+    const observerOptions = {
+        threshold: 0.1,
+        rootMargin: '0px 0px -50px 0px'
+    };
+
+    const revealObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('active');
+            }
+        });
+    }, observerOptions);
+
+    revealElements.forEach(el => revealObserver.observe(el));
+
+    // Typewriter effect for nav
+    const commands = [
+        'rustc main.rs',
+        'cc -o program main.c',
+        'bun run dev',
+        'nvim a.cpp',
+        'whoami',
+        'cat skills.txt',
+        './show_projects.sh',
+        'gcc -O2 life.c -o max',
+        'rm -rf /bugs/*',
+        'make clean',
+        'git push --force',
+        'sudo apt-get install coffee',
+        'echo "Hello World"',
+        'cd /home/max',
+        'ls -la projects/',
+    ];
+
+    const typingEl = document.querySelector('.nav-typing');
+    if (typingEl) {
+        let commandIndex = 0;
+        let charIndex = 0;
+        let isDeleting = false;
+        let isTyping = false;
+        let typingTimeout;
+
+        function typeCommand() {
+            const currentCommand = commands[commandIndex];
+
+            if (isDeleting) {
+                typingEl.textContent = currentCommand.substring(0, charIndex - 1);
+                charIndex--;
+            } else {
+                typingEl.textContent = currentCommand.substring(0, charIndex + 1);
+                charIndex++;
+            }
+
+            let typeSpeed = isDeleting ? 50 : 100;
+
+            if (!isDeleting && charIndex === currentCommand.length) {
+                typeSpeed = 2000;
+                isDeleting = true;
+            } else if (isDeleting && charIndex === 0) {
+                isDeleting = false;
+                commandIndex = (commandIndex + 1) % commands.length;
+                typeSpeed = 500;
+            }
+
+            typingTimeout = setTimeout(typeCommand, typeSpeed);
+        }
+
+        setTimeout(typeCommand, 2000);
+
+        const navLogo = document.querySelector('.nav-brand a');
+        if (navLogo) {
+            navLogo.addEventListener('mouseenter', () => {
+                clearTimeout(typingTimeout);
+                typingEl.textContent = '';
+                isTyping = true;
+            });
+
+            navLogo.addEventListener('mouseleave', () => {
+                if (isTyping) {
+                    isTyping = false;
+                    charIndex = 0;
+                    isDeleting = false;
+                    typeCommand();
+                }
+            });
+        }
+    }
+
+    // Smooth scroll for anchor links
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function(e) {
+            e.preventDefault();
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth' });
+            }
+        });
+    });
+
+    // Active nav highlighting
+    const sections = document.querySelectorAll('section[id]');
+    const navCommands = document.querySelectorAll('.nav-command');
+
+    let ticking = false;
+    window.addEventListener('scroll', () => {
+        if (!ticking) {
+            requestAnimationFrame(() => {
+                let current = '';
+                sections.forEach(section => {
+                    const sectionTop = section.offsetTop;
+                    if (window.scrollY >= sectionTop - 200) {
+                        current = section.getAttribute('id');
+                    }
+                });
+
+                navCommands.forEach(cmd => {
+                    cmd.classList.remove('active', 'text-yellow');
+                    const href = cmd.getAttribute('href');
+                    if (href === `#${current}`) {
+                        cmd.classList.add('active', 'text-yellow');
+                    }
+                });
+
+                ticking = false;
+            });
+            ticking = true;
+        }
+    });
+
+    // Parallax effect for hex grid
+    window.addEventListener('scroll', () => {
+        const scrolled = window.pageYOffset;
+        const hexGrid = document.querySelector('.hex-grid');
+        if (hexGrid) {
+            hexGrid.style.transform = `translateY(${scrolled * 0.1}px)`;
+        }
+    });
+});
+    </script>
+</body>
+</html>

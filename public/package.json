@@ -1,0 +1,18 @@
+{
+  "name": "my-website",
+  "version": "1.0.0",
+  "description": "Max Oliinyk - Personal Portfolio",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run build && bunx serve -p 3000 dist",
+    "build": "mkdir -p dist && cp index.html dist/ && cp public/* dist/",
+    "deploy": "bun run build && bunx gh-pages -d dist"
+  },
+  "keywords": [],
+  "author": "Max Oliinyk",
+  "license": "ISC",
+  "devDependencies": {
+    "gh-pages": "^6.2.0",
+    "serve": "^14.2.4"
+  }
+}

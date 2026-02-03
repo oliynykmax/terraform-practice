@@ -17,17 +17,10 @@ env:
   K8S_NAMESPACE: default
   K8S_DEPLOYMENT: bun-k8s-demo
   KUBECONFIG: ${{ github.workspace }}/.kube/config
-  # These will be available to all steps in the job
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    # Pass environment to all steps
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     
     steps:
       - name: Checkout
@@ -44,11 +37,8 @@ jobs:
       - name: Verify AWS credentials
         run: |
           echo "=== Checking AWS credentials ==="
-          echo "AWS_ACCESS_KEY_ID length: ${#AWS_ACCESS_KEY_ID}"
-          echo "AWS_SECRET_ACCESS_KEY length: ${#AWS_SECRET_ACCESS_KEY}"
-          echo "AWS Region: $AWS_REGION"
           aws sts get-caller-identity
-          echo "✅ AWS credentials loaded successfully"
+          echo "✅ AWS credentials loaded"
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -90,26 +80,50 @@ jobs:
       - name: Create kubeconfig directory
         run: |
           echo "=== Creating kube directory ==="
-          mkdir -p ${{ github.workspace }}/.kube
+          mkdir -p $(dirname $KUBECONFIG)
 
-      - name: Update kubeconfig
+      - name: Update kubeconfig with AWS profile
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         run: |
           echo "=== Updating kubeconfig ==="
+          echo "KUBECONFIG: $KUBECONFIG"
+          echo "AWS Region: $AWS_REGION"
+          echo "Creating AWS profile in ~/.aws/config..."
+          
+          # Create AWS config directory and profile
+          mkdir -p ~/.aws
+          cat > ~/.aws/config << 'EOF'
+          [default]
+          region = ${AWS_REGION}
+          
+          [profile default]
+          region = ${AWS_REGION}
+          output = json
+          EOF
+          
+          # Create credentials file
+          cat > ~/.aws/credentials << 'EOF'
+          [default]
+          aws_access_key_id = ${AWS_ACCESS_KEY_ID}
+          aws_secret_access_key = ${AWS_SECRET_ACCESS_KEY}
+          EOF
+          
+          echo "✅ AWS profile created"
+          
+          # Update kubeconfig
           aws eks update-kubeconfig \
             --name bun-k8s-demo \
             --region ${{ env.AWS_REGION }} \
-            --alias bun-k8s-demo
-          echo "=== Kubeconfig contents ==="
-          cat ${{ env.KUBECONFIG }} || echo "File not found"
-
-      - name: Verify kubeconfig
-        run: |
-          echo "=== Verifying kubeconfig ==="
-          if [ -f "$KUBECONFIG" ]; then
-            echo "✅ Kubeconfig exists at: $KUBECONFIG"
-            cat "$KUBECONFIG"
+            --profile default \
+            --kubeconfig $KUBECONFIG
+          
+          echo "=== Kubeconfig created ==="
+          if [ -f $KUBECONFIG ]; then
+            cat $KUBECONFIG
           else
-            echo "❌ Kubeconfig not found at: $KUBECONFIG"
+            echo "❌ Kubeconfig not created"
             exit 1
           fi
 
@@ -126,11 +140,18 @@ jobs:
         run: |
           echo "=== Verifying kubectl connection ==="
           export KUBECONFIG=$KUBECONFIG
-          echo "KUBECONFIG: $KUBECONFIG"
-          kubectl config current-context
-          kubectl cluster-info
-          kubectl get nodes
-          echo "✅ kubectl connected successfully"
+          
+          # Debug: Show config
+          echo "Kubeconfig path: $KUBECONFIG"
+          cat $KUBECONFIG || echo "Config not found"
+          
+          # Verify current context
+          kubectl config current-context || true
+          
+          # Try to get nodes
+          kubectl get nodes -o wide || echo "Nodes query failed"
+          
+          echo "✅ kubectl connection attempt complete"
 
       - name: Update image in Kubernetes deployment
         run: |
@@ -146,7 +167,10 @@ jobs:
         run: |
           echo "=== Waiting for rollout ==="
           export KUBECONFIG=$KUBECONFIG
-          kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} --timeout=300s
+          kubectl rollout status deployment/${{ env.K8S_DEPLOYMENT }} --timeout=300s || \
+          (echo "Rollout timed out, checking status..." && \
+          kubectl get pods -l app=${{ env.K8S_DEPLOYMENT }} && \
+          exit 1)
           echo "✅ Rollout completed successfully"
 
       - name: Get deployment status

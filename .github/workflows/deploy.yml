@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 env:
-  AWS_REGION: eu-north-1
+  AWS_REGION: us-east-1
   ECR_REPOSITORY: bun-k8s-demo
   K8S_NAMESPACE: default
   K8S_DEPLOYMENT: bun-k8s-demo

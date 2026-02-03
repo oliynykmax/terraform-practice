@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: bun-k8s-demo
-        image: 176545285424.dkr.ecr.eu-north-1.amazonaws.com/bun-k8s-demo:latest
+        image: YOUR_DOCKER_IMAGE
         ports:
         - containerPort: 3000
         env:

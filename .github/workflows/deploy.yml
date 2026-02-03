@@ -69,30 +69,31 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
 
+    permissions:
+      id-token: write
+      contents: read
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure AWS credentials
+      - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Install kubectl
+      - name: Get EKS Token
+        uses: aws-actions/amazon-eks-get-token@v1
+        with:
+          cluster-name: ${{ env.EKS_CLUSTER }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Set up kubectl
         uses: azure/setup-kubectl@v4
         with:
           version: 'latest'
-
-      - name: Update kubeconfig
-        run: |
-          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER }} --region ${{ env.AWS_REGION }}
-          echo "KUBECONFIG=$HOME/.kube/config" >> $GITHUB_ENV
-
-      - name: Verify EKS connection
-        run: |
-          aws eks describe-cluster --name ${{ env.EKS_CLUSTER }} --region ${{ env.AWS_REGION }} --query cluster.status
 
       - name: Update Kubernetes deployment
         run: |

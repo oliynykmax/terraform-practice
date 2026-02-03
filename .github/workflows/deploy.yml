@@ -24,6 +24,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      registry: ${{ steps.login-ecr.outputs.registry }}
 
     steps:
       - name: Checkout
@@ -83,15 +85,13 @@ jobs:
         with:
           version: 'latest'
 
-      - name: Authenticate to EKS
-        uses: aws-actions/amazon-eks-github-auth@v1
-        with:
-          cluster-name: ${{ env.EKS_CLUSTER }}
-          region: ${{ env.AWS_REGION }}
+      - name: Update kubeconfig
+        run: |
+          aws eks update-kubeconfig --name ${{ env.EKS_CLUSTER }} --region ${{ env.AWS_REGION }}
 
       - name: Update Kubernetes deployment
         run: |
-          NEW_IMAGE="${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
+          NEW_IMAGE="${{ needs.build.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ github.sha }}"
           kubectl set image deployment/${{ env.K8S_DEPLOYMENT }} ${{ env.K8S_DEPLOYMENT }}=$NEW_IMAGE
 
       - name: Wait for deployment rollout

@@ -10,15 +10,13 @@ interface WSData {
 }
 
 const sessions = new Map<string, Session>();
-
-// Cleanup idle sessions after 10 minutes
 const IDLE_TIMEOUT = 10 * 60 * 1000;
 
 setInterval(() => {
   const now = Date.now();
   for (const [id, session] of sessions) {
     if (now - session.lastActivity > IDLE_TIMEOUT) {
-      console.log(`Killing idle session: ${id}`);
+      console.log(`[log] Killing idle session: ${id}`);
       session.process.kill();
       sessions.delete(id);
     }
@@ -48,9 +46,7 @@ async function pipeStream(
       if (done) break;
       ws.send(JSON.stringify({ type, data: decoder.decode(value) }));
     }
-  } catch {
-    // Stream closed
-  }
+  } catch {}
 }
 
 const server = Bun.serve<WSData>({
@@ -78,19 +74,13 @@ const server = Bun.serve<WSData>({
   websocket: {
     open(ws) {
       const { sessionId } = ws.data;
-      
       const proc = createPythonProcess();
       sessions.set(sessionId, { process: proc, lastActivity: Date.now() });
-      
-      console.log(`Session started: ${sessionId}`);
-      
-      if (proc.stdout) {
-        pipeStream(proc.stdout, ws, "stdout");
-      }
-      
-      if (proc.stderr) {
-        pipeStream(proc.stderr, ws, "stderr");
-      }
+
+      console.log(`[log] Session started: ${sessionId}`);
+
+      if (proc.stdout) pipeStream(proc.stdout, ws, "stdout");
+      if (proc.stderr) pipeStream(proc.stderr, ws, "stderr");
       
       proc.exited.then((code) => {
         ws.send(JSON.stringify({ type: "exit", code }));
@@ -123,9 +113,8 @@ const server = Bun.serve<WSData>({
     close(ws) {
       const { sessionId } = ws.data;
       const session = sessions.get(sessionId);
-      
       if (session) {
-        console.log(`Session ended: ${sessionId}`);
+        console.log(`[log] Session ended: ${sessionId}`);
         session.process.kill();
         sessions.delete(sessionId);
       }

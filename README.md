@@ -6,7 +6,7 @@ Personal website on AWS EKS.
 
 ```bash
 terraform init && terraform apply
-aws eks update-kubeconfig --name bun-k8s-demo --region eu-north-1
+aws eks update-kubeconfig --name bun-k8s-demo --region us-east-1
 ```
 
 Push to `main` to deploy via GitHub Actions.
